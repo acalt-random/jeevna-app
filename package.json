@@ -2,13 +2,16 @@
   "name": "life-kpi-app",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "homepage": "https://acalt-random.github.io/jeevna-app",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "predeploy": "expo export -p web",
+    "deploy": "gh-pages --nojekyll -d dist"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
