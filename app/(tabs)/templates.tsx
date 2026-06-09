@@ -4,7 +4,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { TemplatePackPayload, useAppData } from '@/context/AppDataContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
-import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 type Pack = TemplatePackPayload & { id: string; title: string; blurb: string };
@@ -61,13 +62,23 @@ const TEMPLATE_PACKS: Pack[] = [
     id: 'balanced',
     title: 'Balanced Life',
     blurb: 'A little bit across health, work, money, learning, and people.',
-    categories: ['Health', 'Work', 'Finance', 'Learning', 'Relationships'],
+    categories: ['Health', 'Career', 'Finance', 'Learning', 'Relationships'],
     kpis: [
-      { name: 'Movement', category: 'Health', target: 30, unit: 'minutes', weight: 10 },
-      { name: 'Focused work', category: 'Work', target: 4, unit: 'hours', weight: 12 },
-      { name: 'Money check-in', category: 'Finance', target: 1, unit: 'session', weight: 8 },
-      { name: 'Learning time', category: 'Learning', target: 45, unit: 'minutes', weight: 10 },
-      { name: 'Quality time', category: 'Relationships', target: 1, unit: 'session', weight: 10 },
+      // Health
+      { name: 'Sleep', category: 'Health', target: 8, unit: 'hours', weight: 10 },
+      { name: 'Exercise', category: 'Health', target: 20, unit: 'sessions/month', weight: 10 },
+      // Career
+      { name: 'Deep Work', category: 'Career', target: 80, unit: 'hours/month', weight: 12 },
+      { name: 'Skill Development', category: 'Career', target: 20, unit: 'hours/month', weight: 12 },
+      // Finance
+      { name: 'Savings', category: 'Finance', target: 20000, unit: 'amount', weight: 12 },
+      { name: 'Expense Tracking', category: 'Finance', target: 100, unit: 'percent', weight: 8 },
+      // Learning
+      { name: 'Reading', category: 'Learning', target: 24, unit: 'books/year', weight: 10 },
+      { name: 'Courses', category: 'Learning', target: 4, unit: 'courses/year', weight: 10 },
+      // Relationships
+      { name: 'Family Time', category: 'Relationships', target: 12, unit: 'times/month', weight: 10 },
+      { name: 'Friend Meetups', category: 'Relationships', target: 4, unit: 'times/month', weight: 10 },
     ],
   },
 ];
@@ -75,13 +86,24 @@ const TEMPLATE_PACKS: Pack[] = [
 export default function TemplatesScreen() {
   const { applyTemplatePack } = useAppData();
   const deviceType = useDeviceType();
-  const [lastApplied, setLastApplied] = useState<string | null>(null);
+  const router = useRouter();
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleApply = (pack: Pack) => {
     const { id, title, blurb, ...payload } = pack;
     applyTemplatePack(payload);
-    setLastApplied(title);
+    setSuccessMessage(title);
   };
+
+  // Auto-redirect to home after showing success message
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage, router]);
 
   const pageContent = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
@@ -91,8 +113,8 @@ export default function TemplatesScreen() {
           subtitle="Add starter categories and KPIs without duplicating existing names."
         />
 
-          {lastApplied ? (
-            <Text style={styles.feedback}>Applied &quot;{lastApplied}&quot; — check Categories and KPIs.</Text>
+          {successMessage ? (
+            <Text style={styles.feedback}>{successMessage} template installed.</Text>
           ) : null}
 
           {TEMPLATE_PACKS.map((pack) => (

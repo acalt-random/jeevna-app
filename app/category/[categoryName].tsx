@@ -1,7 +1,7 @@
 import { ContactPicker, SelectedContact } from '@/components/ContactPicker';
 import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
-import { KPI, useAppData } from '@/context/AppDataContext';
+import { KPI, PEOPLE_GROUPS, Person, useAppData } from '@/context/AppDataContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -23,8 +23,26 @@ function statusForScore(score: number) {
   return { label: 'Needs Attention', color: '#fb7185', barColor: '#f43f5e' };
 }
 
+function todayYMD(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDisplayDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export default function CategoryDetailScreen() {
-  const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi } = useAppData();
+  const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, personTodos, addPersonTodo, updatePersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [showContactPicker, setShowContactPicker] = useState(false);
@@ -34,6 +52,25 @@ export default function CategoryDetailScreen() {
   const [peopleTodoActivityType, setPeopleTodoActivityType] = useState<'Meet' | 'Call' | 'Message' | 'Date' | 'Other'>('Meet');
   const [peopleTodoFrequency, setPeopleTodoFrequency] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('weekly');
   const [peopleTodoTargetCount, setPeopleTodoTargetCount] = useState('1');
+  const [showAddPersonModal, setShowAddPersonModal] = useState(false);
+  const [personName, setPersonName] = useState('');
+  const [relationshipType, setRelationshipType] = useState('Friend');
+  const [personGroup, setPersonGroup] = useState('Other');
+  const [personPhone, setPersonPhone] = useState('');
+  const [personNotes, setPersonNotes] = useState('');
+  const [personLastContact, setPersonLastContact] = useState(todayYMD());
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<'All' | string>('All');
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [selectedPersonForActivity, setSelectedPersonForActivity] = useState<string | null>(null);
+  const [activityType, setActivityType] = useState<'Call' | 'Meet' | 'Message' | 'Date' | 'Other'>('Call');
+  const [activityDate, setActivityDate] = useState(todayYMD());
+  const [activityNotes, setActivityNotes] = useState('');
+  const [showPersonTodoModal, setShowPersonTodoModal] = useState(false);
+  const [selectedPersonForTodo, setSelectedPersonForTodo] = useState<string | null>(null);
+  const [todoTitle, setTodoTitle] = useState('');
+  const [todoFrequency, setTodoFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'one-time'>('weekly');
+  const [todoDueDate, setTodoDueDate] = useState('');
+  const [todoNotes, setTodoNotes] = useState('');
 
   const categoryName =
     typeof params.categoryName === 'string'
@@ -46,6 +83,45 @@ export default function CategoryDetailScreen() {
     const lowerName = categoryName.toLowerCase();
     return lowerName.includes('social') || lowerName.includes('people') || lowerName.includes('relationship');
   }, [categoryName]);
+
+  const isRelationshipsCategory = useMemo(() => {
+    const lowerName = categoryName.toLowerCase();
+    return lowerName.includes('relationship');
+  }, [categoryName]);
+
+  const handleAddPerson = () => {
+    if (!personName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+    addPerson({
+      name: personName.trim(),
+      relationshipType,
+      groupName: personGroup.trim() || 'Other',
+      phone: personPhone.trim() || undefined,
+      notes: personNotes.trim() || undefined,
+      lastContactDate: personLastContact,
+    });
+    setPersonName('');
+    setRelationshipType('Friend');
+    setPersonGroup('Other');
+    setPersonPhone('');
+    setPersonNotes('');
+    setPersonLastContact(todayYMD());
+    setShowAddPersonModal(false);
+  };
+
+  const handleImportContact = (contact: SelectedContact) => {
+    setShowContactPicker(false);
+    addPerson({
+      name: contact.name,
+      relationshipType: 'Friend',
+      groupName: 'Other',
+      phone: contact.phoneNumber || undefined,
+      notes: `Email: ${contact.email || 'N/A'}`,
+      lastContactDate: todayYMD(),
+    });
+  };
 
   const handleAddContact = (kpiId: string) => {
     setSelectedKpiForContact(kpiId);
@@ -97,6 +173,94 @@ export default function CategoryDetailScreen() {
     setPeopleTodoTargetCount('1');
   };
 
+  const handleContactedToday = (person: Person) => {
+    const todayStr = todayYMD();
+    addPersonActivity({
+      personId: person.id,
+      activityType: 'Other',
+      date: todayStr,
+      notes: 'Contacted today',
+    });
+    updatePerson({
+      ...person,
+      lastContactDate: todayStr,
+    });
+  };
+
+  const handleStartAddActivity = (personId: string) => {
+    setSelectedPersonForActivity(personId);
+    setActivityType('Call');
+    setActivityDate(todayYMD());
+    setActivityNotes('');
+    setShowActivityModal(true);
+  };
+
+  const handleCancelActivity = () => {
+    setSelectedPersonForActivity(null);
+    setActivityType('Call');
+    setActivityDate(todayYMD());
+    setActivityNotes('');
+    setShowActivityModal(false);
+  };
+
+  const handleSaveActivity = () => {
+    if (!selectedPersonForActivity) return;
+
+    const person = people.find((p) => p.id === selectedPersonForActivity);
+    if (!person) return;
+
+    addPersonActivity({
+      personId: selectedPersonForActivity,
+      activityType,
+      date: activityDate,
+      notes: activityNotes.trim() || undefined,
+    });
+
+    updatePerson({
+      ...person,
+      lastContactDate: activityDate,
+    });
+
+    handleCancelActivity();
+  };
+
+  const handleStartAddPersonTodo = (personId: string) => {
+    setSelectedPersonForTodo(personId);
+    setTodoTitle('');
+    setTodoFrequency('weekly');
+    setTodoDueDate('');
+    setTodoNotes('');
+    setShowPersonTodoModal(true);
+  };
+
+  const handleCancelPersonTodo = () => {
+    setSelectedPersonForTodo(null);
+    setTodoTitle('');
+    setTodoFrequency('weekly');
+    setTodoDueDate('');
+    setTodoNotes('');
+    setShowPersonTodoModal(false);
+  };
+
+  const handleSavePersonTodo = () => {
+    if (!selectedPersonForTodo || !todoTitle.trim()) return;
+
+    addPersonTodo({
+      personId: selectedPersonForTodo,
+      title: todoTitle.trim(),
+      frequency: todoFrequency,
+      dueDate: todoDueDate.trim() || undefined,
+      completed: false,
+      notes: todoNotes.trim() || undefined,
+    });
+
+    handleCancelPersonTodo();
+  };
+
+  const handleTogglePersonTodo = (todoId: string) => {
+    togglePersonTodo(todoId);
+  };
+
   const category = useMemo(
     () => categories.find((item) => item.name.toLowerCase() === categoryName.toLowerCase()),
     [categories, categoryName]
@@ -106,6 +270,44 @@ export default function CategoryDetailScreen() {
     () => kpis.filter((kpi) => category !== undefined && kpi.category === category.name),
     [kpis, category]
   );
+
+  const normalizedPeople = useMemo(() => {
+    return people.map((person) => ({
+      ...person,
+      groupName:
+        typeof person.groupName === 'string' && person.groupName.trim()
+          ? person.groupName.trim()
+          : 'Other',
+    }));
+  }, [people]);
+
+  const categoryPeople = useMemo(() => {
+    if (!isRelationshipsCategory) return [];
+    return normalizedPeople;
+  }, [normalizedPeople, isRelationshipsCategory]);
+
+  const filteredPeople = useMemo(() => {
+    if (selectedGroupFilter === 'All') return categoryPeople;
+    return categoryPeople.filter((person) => person.groupName === selectedGroupFilter);
+  }, [categoryPeople, selectedGroupFilter]);
+
+  const groupedPeopleSections = useMemo(() => {
+    return PEOPLE_GROUPS.map((groupName) => ({
+      groupName,
+      people: filteredPeople.filter((person) => person.groupName === groupName),
+    })).filter((section) => section.people.length > 0);
+  }, [filteredPeople]);
+
+  const peopleNeedingAttention = useMemo(() => {
+    if (!isRelationshipsCategory) return [];
+    return normalizedPeople
+      .map((person) => ({
+        person,
+        score: getRelationshipsScore(person.id),
+      }))
+      .filter((entry) => entry.score < 70)
+      .sort((a, b) => a.score - b.score);
+  }, [normalizedPeople, getRelationshipsScore, isRelationshipsCategory]);
 
   const categoryScore = useMemo(() => {
     if (categoryKpis.length === 0) return 0;
@@ -169,6 +371,179 @@ export default function CategoryDetailScreen() {
             <Text style={styles.detailLine}>KPIs in category: {categoryKpis.length}</Text>
             <Text style={styles.detailLine}>To-dos completed today: {categoryTodoProgress.completed} / {categoryTodoProgress.total} ({categoryTodoProgress.percent}%)</Text>
           </View>
+
+          {isRelationshipsCategory && (
+            <View style={styles.attentionSection}>
+              <Text style={styles.attentionTitle}>People Needing Attention</Text>
+              {peopleNeedingAttention.length === 0 ? (
+                <Text style={styles.attentionMessage}>All relationships are healthy</Text>
+              ) : (
+                peopleNeedingAttention.map(({ person, score }) => {
+                  const lastContactDays = person.lastContactDate
+                    ? Math.floor((new Date().getTime() - new Date(person.lastContactDate).getTime()) / (1000 * 60 * 60 * 24))
+                    : null;
+                  return (
+                    <View key={person.id} style={styles.attentionRow}>
+                      <View style={styles.attentionMain}>
+                        <Text style={styles.attentionName}>{person.name}</Text>
+                        <Text style={styles.attentionMeta}>{person.groupName} · {lastContactDays !== null ? `${lastContactDays} days ago` : 'No contact date'}</Text>
+                      </View>
+                      <Text style={styles.attentionScore}>{score}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {isRelationshipsCategory && (
+            <View style={styles.peopleSection}>
+              <View style={styles.peopleSectionHeader}>
+                <Text style={styles.peopleSectionTitle}>Relationships</Text>
+                <TouchableOpacity
+                  style={styles.addPersonButton}
+                  onPress={() => setShowAddPersonModal(true)}
+                >
+                  <Text style={styles.addPersonButtonText}>+ Add Person</Text>
+                </TouchableOpacity>
+              </View>
+
+              {categoryPeople.length > 0 ? (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.peopleFilterRow}>
+                    {['All', ...PEOPLE_GROUPS].map((group) => (
+                      <TouchableOpacity
+                        key={group}
+                        style={[
+                          styles.filterButton,
+                          selectedGroupFilter === group && styles.filterButtonActive,
+                        ]}
+                        onPress={() => setSelectedGroupFilter(group)}
+                      >
+                        <Text
+                          style={[
+                            styles.filterButtonText,
+                            selectedGroupFilter === group && styles.filterButtonTextActive,
+                          ]}
+                        >
+                          {group}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {filteredPeople.length > 0 ? (
+                    groupedPeopleSections.map((section) => (
+                      <View key={section.groupName} style={styles.peopleGroupSection}>
+                        <Text style={styles.peopleGroupHeader}>{section.groupName}</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.peopleCardsScroll}>
+                          {section.people.map((person) => {
+                            const score = getRelationshipsScore(person.id);
+                            const scoreStatus = score >= 80 ? { color: '#34d399' } : score >= 50 ? { color: '#fbbf24' } : { color: '#fb7185' };
+                            const recentActivities = getActivitiesForPerson(person.id).slice(0, 3);
+                            return (
+                              <View key={person.id} style={styles.personCard}>
+                                <View style={styles.personCardHeader}>
+                                  <Text style={styles.personName}>{person.name}</Text>
+                                  <TouchableOpacity onPress={() => deletePerson(person.id)}>
+                                    <Text style={styles.personRemoveButton}>×</Text>
+                                  </TouchableOpacity>
+                                </View>
+                                <Text style={styles.personRelationType}>{person.relationshipType}</Text>
+                                {person.lastContactDate && (
+                                  <Text style={styles.personLastContact}>Last: {person.lastContactDate}</Text>
+                                )}
+                                <View style={styles.personScore}>
+                                  <Text style={[styles.personScoreLabel, scoreStatus]}>
+                                    Score: {score}
+                                  </Text>
+                                </View>
+                                {person.phone && (
+                                  <Text style={styles.personPhone}>{person.phone}</Text>
+                                )}
+                                <View style={styles.personActionRow}>
+                                  <TouchableOpacity
+                                    style={styles.personActionButton}
+                                    onPress={() => handleContactedToday(person)}
+                                  >
+                                    <Text style={styles.personActionText}>Contacted Today</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={styles.personActionButtonSecondary}
+                                    onPress={() => handleStartAddActivity(person.id)}
+                                  >
+                                    <Text style={styles.personActionText}>Add Activity</Text>
+                                  </TouchableOpacity>
+                                </View>
+                                <View style={styles.activityHistorySection}>
+                                  <Text style={styles.activityHistoryLabel}>Recent activity</Text>
+                                  {recentActivities.length > 0 ? (
+                                    recentActivities.map((activity) => (
+                                      <View key={activity.id} style={styles.activityHistoryRow}>
+                                        <Text style={styles.activityHistoryText}>
+                                          {formatDisplayDate(activity.date)} - {activity.activityType} - {activity.notes ?? 'No notes'}
+                                        </Text>
+                                      </View>
+                                    ))
+                                  ) : (
+                                    <Text style={styles.activityHistoryText}>No activity yet</Text>
+                                  )}
+                                </View>
+                                <View style={styles.personTodoSection}>
+                                  <View style={styles.personTodoHeader}>
+                                    <Text style={styles.personTodoLabel}>To-Dos</Text>
+                                    <TouchableOpacity
+                                      style={styles.personTodoAddButton}
+                                      onPress={() => handleStartAddPersonTodo(person.id)}
+                                    >
+                                      <Text style={styles.personTodoAddText}>+ Add</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                  {getTodosForPerson(person.id).length > 0 ? (
+                                    getTodosForPerson(person.id).map((todo) => (
+                                      <View key={todo.id} style={[styles.personTodoRow, todo.completed && styles.personTodoRowCompleted]}>
+                                        <TouchableOpacity
+                                          style={styles.personTodoCheckbox}
+                                          onPress={() => handleTogglePersonTodo(todo.id)}
+                                        >
+                                          <Text style={styles.personTodoCheckboxText}>{todo.completed ? '☑' : '☐'}</Text>
+                                        </TouchableOpacity>
+                                        <View style={styles.personTodoContent}>
+                                          <Text style={[styles.personTodoTitle, todo.completed && styles.personTodoTitleCompleted]}>
+                                            {todo.title}
+                                          </Text>
+                                          <View style={styles.personTodoMeta}>
+                                            <Text style={styles.personTodoMetaText}>{todo.frequency}</Text>
+                                            {todo.dueDate && <Text style={styles.personTodoMetaText}> · {formatDisplayDate(todo.dueDate)}</Text>}
+                                          </View>
+                                        </View>
+                                        <TouchableOpacity
+                                          style={styles.personTodoDelete}
+                                          onPress={() => deletePersonTodo(todo.id)}
+                                        >
+                                          <Text style={styles.personTodoDeleteText}>×</Text>
+                                        </TouchableOpacity>
+                                      </View>
+                                    ))
+                                  ) : (
+                                    <Text style={styles.personTodoEmpty}>No to-dos yet</Text>
+                                  )}
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noPeopleMessage}>No people found for this group.</Text>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.noPeopleMessage}>No people added yet. Start by adding someone.</Text>
+              )}
+            </View>
+          )}
 
           {categoryKpis.length === 0 ? (
             <EmptyState
@@ -357,11 +732,262 @@ export default function CategoryDetailScreen() {
           </View>
         </View>
       )}
+      {showActivityModal && selectedPersonForActivity && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Relationship Activity</Text>
+              <TouchableOpacity onPress={handleCancelActivity}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>Activity type</Text>
+            <View style={styles.optionRow}>
+              {['Call', 'Meet', 'Message', 'Date', 'Other'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.optionButton,
+                    activityType === type && styles.optionButtonActive,
+                  ]}
+                  onPress={() => setActivityType(type as any)}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      activityType === type && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalLabel}>Date</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#64748b"
+              value={activityDate}
+              onChangeText={setActivityDate}
+            />
+
+            <Text style={styles.modalLabel}>Notes</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 80 }]}
+              placeholder="Notes (optional)"
+              placeholderTextColor="#64748b"
+              value={activityNotes}
+              onChangeText={setActivityNotes}
+              multiline
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveActivity}>
+              <Text style={styles.saveButtonText}>Save Activity</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dismissButton} onPress={handleCancelActivity}>
+              <Text style={styles.dismissButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {showPersonTodoModal && selectedPersonForTodo && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Relationship To-Do</Text>
+              <TouchableOpacity onPress={handleCancelPersonTodo}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>Title *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter to-do title"
+              placeholderTextColor="#64748b"
+              value={todoTitle}
+              onChangeText={setTodoTitle}
+            />
+
+            <Text style={styles.modalLabel}>Frequency</Text>
+            <View style={styles.optionRow}>
+              {['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'one-time'].map((freq) => (
+                <TouchableOpacity
+                  key={freq}
+                  style={[
+                    styles.optionButton,
+                    todoFrequency === freq && styles.optionButtonActive,
+                  ]}
+                  onPress={() => setTodoFrequency(freq as any)}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      todoFrequency === freq && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    {freq}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalLabel}>Due Date (optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#64748b"
+              value={todoDueDate}
+              onChangeText={setTodoDueDate}
+            />
+
+            <Text style={styles.modalLabel}>Notes</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 80 }]}
+              placeholder="Notes (optional)"
+              placeholderTextColor="#64748b"
+              value={todoNotes}
+              onChangeText={setTodoNotes}
+              multiline
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleSavePersonTodo}>
+              <Text style={styles.saveButtonText}>Save To-Do</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dismissButton} onPress={handleCancelPersonTodo}>
+              <Text style={styles.dismissButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {showContactPicker && (
         <ContactPicker
           onContactSelected={handleContactSelected}
           onDismiss={handleDismissContactPicker}
         />
+      )}
+      {showAddPersonModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.addPersonModalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Person</Text>
+              <TouchableOpacity onPress={() => setShowAddPersonModal(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>Name *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter name"
+              placeholderTextColor="#64748b"
+              value={personName}
+              onChangeText={setPersonName}
+            />
+
+            <Text style={styles.modalLabel}>Relationship Type</Text>
+            <View style={styles.optionRow}>
+              {['Friend', 'Family', 'Colleague', 'Acquaintance', 'Other'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.optionButton,
+                    relationshipType === type && styles.optionButtonActive,
+                  ]}
+                  onPress={() => setRelationshipType(type)}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      relationshipType === type && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalLabel}>Group</Text>
+            <View style={styles.optionRow}>
+              {PEOPLE_GROUPS.map((group) => (
+                <TouchableOpacity
+                  key={group}
+                  style={[
+                    styles.optionButton,
+                    personGroup === group && styles.optionButtonActive,
+                  ]}
+                  onPress={() => setPersonGroup(group)}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      personGroup === group && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    {group}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Or type a group"
+              placeholderTextColor="#64748b"
+              value={personGroup}
+              onChangeText={setPersonGroup}
+            />
+
+            <Text style={styles.modalLabel}>Phone</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Phone number (optional)"
+              placeholderTextColor="#64748b"
+              value={personPhone}
+              onChangeText={setPersonPhone}
+            />
+
+            <Text style={styles.modalLabel}>Notes</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 80 }]}
+              placeholder="Notes (optional)"
+              placeholderTextColor="#64748b"
+              value={personNotes}
+              onChangeText={setPersonNotes}
+              multiline
+            />
+
+            <Text style={styles.modalLabel}>Last Contact Date</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#64748b"
+              value={personLastContact}
+              onChangeText={setPersonLastContact}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleAddPerson}>
+              <Text style={styles.saveButtonText}>Add Person</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.dismissButton, { marginTop: 0, marginBottom: 12 }]}
+              onPress={() => {
+                setShowAddPersonModal(false);
+                setShowContactPicker(true);
+              }}
+            >
+              <Text style={styles.dismissButtonText}>+ Import from Contacts</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dismissButton} onPress={() => setShowAddPersonModal(false)}>
+              <Text style={styles.dismissButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -771,5 +1397,306 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // People CRM Styles
+  peopleSection: {
+    marginBottom: 24,
+  },
+  peopleSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  peopleSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#f8fafc',
+  },
+  addPersonButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  addPersonButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  peopleFilterRow: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+    marginRight: 10,
+  },
+  filterButtonActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  filterButtonText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterButtonTextActive: {
+    color: '#ffffff',
+  },
+  peopleGroupSection: {
+    marginBottom: 16,
+  },
+  peopleGroupHeader: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#f8fafc',
+    marginBottom: 10,
+  },
+  peopleCardsScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  personCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 12,
+    minWidth: 160,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3b82f6',
+  },
+  personCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  personName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f1f5f9',
+    flex: 1,
+  },
+  personRemoveButton: {
+    fontSize: 20,
+    color: '#64748b',
+    marginLeft: 8,
+  },
+  personRelationType: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginBottom: 6,
+  },
+  personLastContact: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  personScore: {
+    marginBottom: 8,
+  },
+  personScoreLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  personPhone: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  personActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  personActionButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  personActionButtonSecondary: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  personActionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activityHistorySection: {
+    marginTop: 12,
+  },
+  activityHistoryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94a3b8',
+    marginBottom: 6,
+  },
+  activityHistoryRow: {
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+  },
+  activityHistoryText: {
+    fontSize: 12,
+    color: '#cbd5e1',
+  },
+  attentionSection: {
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    marginBottom: 20,
+  },
+  attentionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#f8fafc',
+    marginBottom: 12,
+  },
+  attentionMessage: {
+    color: '#94a3b8',
+    fontSize: 14,
+  },
+  attentionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  attentionMain: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  attentionName: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  attentionMeta: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  attentionScore: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fb7185',
+  },
+  noPeopleMessage: {
+    color: '#64748b',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  addPersonModalCard: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: '#0f172a',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 20,
+    maxHeight: '80%',
+  },
+  personTodoSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  personTodoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  personTodoLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#cbd5e1',
+  },
+  personTodoAddButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#3b82f6',
+    borderRadius: 6,
+  },
+  personTodoAddText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  personTodoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: '#111827',
+    marginBottom: 8,
+  },
+  personTodoRowCompleted: {
+    backgroundColor: '#0f172a',
+    opacity: 0.7,
+  },
+  personTodoCheckbox: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  personTodoCheckboxText: {
+    fontSize: 16,
+    color: '#3b82f6',
+  },
+  personTodoContent: {
+    flex: 1,
+  },
+  personTodoTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#e2e8f0',
+    marginBottom: 2,
+  },
+  personTodoTitleCompleted: {
+    color: '#64748b',
+    textDecorationLine: 'line-through',
+  },
+  personTodoMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  personTodoMetaText: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  personTodoDelete: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  personTodoDeleteText: {
+    fontSize: 18,
+    color: '#ef4444',
+    fontWeight: '700',
+  },
+  personTodoEmpty: {
+    fontSize: 12,
+    color: '#64748b',
+    fontStyle: 'italic',
+    paddingVertical: 8,
   },
 });

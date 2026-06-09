@@ -54,6 +54,47 @@ export interface SavedContact {
   email?: string;
 }
 
+export interface Person {
+  id: string;
+  name: string;
+  relationshipType: string;
+  groupName: string;
+  phone?: string;
+  notes?: string;
+  lastContactDate?: string;
+}
+
+export interface PersonActivity {
+  id: string;
+  personId: string;
+  activityType: 'Call' | 'Meet' | 'Message' | 'Date' | 'Other';
+  date: string;
+  notes?: string;
+}
+
+export interface PersonTodo {
+  id: string;
+  personId: string;
+  title: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'one-time';
+  dueDate?: string;
+  completed: boolean;
+  completedDate?: string;
+  notes?: string;
+}
+
+export const PEOPLE_GROUPS = [
+  'Family',
+  'School Friends',
+  'College',
+  'Workplace 1',
+  'Workplace 2',
+  'Neighbourhood',
+  'Other',
+] as const;
+
+export type PeopleGroupName = (typeof PEOPLE_GROUPS)[number];
+
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** Data for applying a starter pack (categories + KPIs). Duplicates are skipped. */
@@ -212,6 +253,18 @@ interface AppDataContextType {
   deletePeopleTodo: (id: string) => void;
   getPeopleTodosForKpi: (kpiId: string) => PeopleTodo[];
   // ──────────────────────
+  personActivities: PersonActivity[];
+  addPersonActivity: (activity: Omit<PersonActivity, 'id'>) => void;
+  deletePersonActivity: (activityId: string) => void;
+  getActivitiesForPerson: (personId: string) => PersonActivity[];
+  // ─── Person To-Dos ───
+  personTodos: PersonTodo[];
+  addPersonTodo: (todo: Omit<PersonTodo, 'id'>) => void;
+  updatePersonTodo: (todo: PersonTodo) => void;
+  deletePersonTodo: (todoId: string) => void;
+  togglePersonTodo: (todoId: string) => void;
+  getTodosForPerson: (personId: string) => PersonTodo[];
+  // ──────────────────────
   addCategory: (name: string) => void;
   updateCategory: (id: string, newName: string) => void;
   addKPI: (kpi: { name: string; category: string; target: number; unit: string; weight: number }) => void;
@@ -226,6 +279,13 @@ interface AppDataContextType {
   deleteSavedContact: (id: string) => void;
   getContactsForKpi: (kpiId: string) => SavedContact[];
   // ──────────────────────
+  // ─── People CRM ───
+  people: Person[];
+  addPerson: (person: Omit<Person, 'id'>) => void;
+  updatePerson: (person: Person) => void;
+  deletePerson: (id: string) => void;
+  getRelationshipsScore: (personId: string) => number;
+  // ──────────────────
   loadSampleData: () => void;
   clearAllData: () => void;
 }
@@ -243,6 +303,9 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [subtaskLogs, setSubtaskLogs] = useState<SubtaskLog[]>([]);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [peopleTodos, setPeopleTodos] = useState<PeopleTodo[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [personActivities, setPersonActivities] = useState<PersonActivity[]>([]);
+  const [personTodos, setPersonTodos] = useState<PersonTodo[]>([]);
   // ──────────
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -288,6 +351,33 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         const savedPeopleTodos = await AsyncStorage.getItem('peopleTodos');
         if (savedPeopleTodos) {
           setPeopleTodos(JSON.parse(savedPeopleTodos));
+        }
+        const savedPeople = await AsyncStorage.getItem('people');
+        if (savedPeople) {
+          const parsedPeople = JSON.parse(savedPeople) as Array<Partial<Person>>;
+          setPeople(
+            parsedPeople.map((person) => ({
+              id: person.id ?? `person-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              name: person.name ?? 'Unknown',
+              relationshipType: person.relationshipType ?? 'Other',
+              groupName:
+                typeof person.groupName === 'string' && person.groupName.trim()
+                  ? person.groupName.trim()
+                  : 'Other',
+              phone: person.phone,
+              notes: person.notes,
+              lastContactDate: person.lastContactDate,
+            }))
+          );
+        }
+
+        const savedPersonActivities = await AsyncStorage.getItem('personActivities');
+        if (savedPersonActivities) {
+          setPersonActivities(JSON.parse(savedPersonActivities));
+        }
+        const savedPersonTodos = await AsyncStorage.getItem('personTodos');
+        if (savedPersonTodos) {
+          setPersonTodos(JSON.parse(savedPersonTodos));
         }
         // ─────────────────────────────────────────
       } catch (error) {
@@ -412,6 +502,30 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
     save();
   }, [peopleTodos, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem('personActivities', JSON.stringify(personActivities));
+      } catch (error) {
+        console.error('Error saving personActivities to AsyncStorage', error);
+      }
+    };
+    save();
+  }, [personActivities, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem('personTodos', JSON.stringify(personTodos));
+      } catch (error) {
+        console.error('Error saving personTodos to AsyncStorage', error);
+      }
+    };
+    save();
+  }, [personTodos, isHydrated]);
 
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -551,6 +665,62 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const getPeopleTodosForKpi = (kpiId: string) => peopleTodos.filter(todo => todo.kpiId === kpiId);
 
+  const addPersonActivity = (activity: Omit<PersonActivity, 'id'>) => {
+    const newActivity: PersonActivity = {
+      id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      ...activity,
+    };
+    setPersonActivities(prev => [...prev, newActivity]);
+  };
+
+  const deletePersonActivity = (activityId: string) => {
+    setPersonActivities(prev => prev.filter((activity) => activity.id !== activityId));
+  };
+
+  const getActivitiesForPerson = (personId: string) =>
+    personActivities
+      .filter((activity) => activity.personId === personId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+  const addPersonTodo = (todo: Omit<PersonTodo, 'id'>) => {
+    const newTodo: PersonTodo = {
+      id: `perstodo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      ...todo,
+    };
+    setPersonTodos(prev => [...prev, newTodo]);
+  };
+
+  const updatePersonTodo = (todo: PersonTodo) => {
+    setPersonTodos(prev => prev.map(t => (t.id === todo.id ? todo : t)));
+  };
+
+  const deletePersonTodo = (todoId: string) => {
+    setPersonTodos(prev => prev.filter(t => t.id !== todoId));
+  };
+
+  const togglePersonTodo = (todoId: string) => {
+    setPersonTodos(prev =>
+      prev.map(t => {
+        if (t.id === todoId) {
+          return {
+            ...t,
+            completed: !t.completed,
+            completedDate: !t.completed ? todayYMD() : undefined,
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const getTodosForPerson = (personId: string): PersonTodo[] =>
+    personTodos
+      .filter(t => t.personId === personId)
+      .sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return (b.dueDate || '').localeCompare(a.dueDate || '');
+      });
+
   // ──────────────────────────────────────────────────────────────────────────
 
   const addSavedContact = (contact: Omit<SavedContact, 'id'>) => {
@@ -634,6 +804,52 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
   };
 
+  const addPerson = (person: Omit<Person, 'id'>) => {
+    const id = `person-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    setPeople((prev) => {
+      const updated = [...prev, { ...person, id }];
+      AsyncStorage.setItem('people', JSON.stringify(updated)).catch((e) => 
+        console.error('Error saving people', e)
+      );
+      return updated;
+    });
+  };
+
+  const updatePerson = (person: Person) => {
+    setPeople((prev) => {
+      const updated = prev.map((p) => (p.id === person.id ? person : p));
+      AsyncStorage.setItem('people', JSON.stringify(updated)).catch((e) => 
+        console.error('Error saving people', e)
+      );
+      return updated;
+    });
+  };
+
+  const deletePerson = (id: string) => {
+    setPeople((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      AsyncStorage.setItem('people', JSON.stringify(updated)).catch((e) => 
+        console.error('Error saving people', e)
+      );
+      return updated;
+    });
+  };
+
+  const getRelationshipsScore = (personId: string): number => {
+    const person = people.find((p) => p.id === personId);
+    if (!person || !person.lastContactDate) return 0;
+    
+    const lastContact = new Date(person.lastContactDate);
+    const today = new Date();
+    const daysSinceContact = Math.floor(
+      (today.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    const maxDays = 90;
+    const score = Math.max(0, Math.round((1 - daysSinceContact / maxDays) * 100));
+    return Math.min(100, score);
+  };
+
   const loadSampleData = () => {
     const dates = lastSevenDateKeysOldestFirst();
     const sampleEntries: DayEntry[] = dates.map((date, index) => {
@@ -672,6 +888,9 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSubtaskLogs([]);
     setSavedContacts([]);
     setPeopleTodos([]);
+    setPeople([]);
+    setPersonActivities([]);
+    setPersonTodos([]);
     AsyncStorage.multiRemove([
       'categories',
       'kpis',
@@ -682,6 +901,9 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       'subtaskLogs',
       'savedContacts',
       'peopleTodos',
+      'people',
+      'personActivities',
+      'personTodos',
     ]).catch((err) => console.error('Error clearing AsyncStorage', err));
   };
 
@@ -707,6 +929,21 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         addSavedContact,
         deleteSavedContact,
         getContactsForKpi,
+        people,
+        personActivities,
+        addPersonActivity,
+        deletePersonActivity,
+        getActivitiesForPerson,
+        personTodos,
+        addPersonTodo,
+        updatePersonTodo,
+        deletePersonTodo,
+        togglePersonTodo,
+        getTodosForPerson,
+        addPerson,
+        updatePerson,
+        deletePerson,
+        getRelationshipsScore,
         addCategory,
         updateCategory,
         addKPI,
