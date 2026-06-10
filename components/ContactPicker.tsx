@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export interface SelectedContact {
@@ -27,21 +27,6 @@ export function ContactPicker({ onContactSelected, onDismiss }: ContactPickerPro
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
-
-  // Web-only message
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.container}>
-        <View style={styles.modal}>
-          <Text style={styles.title}>Contact Picker</Text>
-          <Text style={styles.message}>Contact picker is available on phone only. Use the web version to manage KPIs directly.</Text>
-          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss}>
-            <Text style={styles.dismissButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
 
   // Request permissions and load contacts
   React.useEffect(() => {
@@ -77,6 +62,21 @@ export function ContactPicker({ onContactSelected, onDismiss }: ContactPickerPro
       contact.name?.toLowerCase().includes(query)
     );
   }, [contacts, searchQuery]);
+
+    // Web-only message
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.modal}>
+          <Text style={styles.title}>Contact Picker</Text>
+          <Text style={styles.message}>Contact picker is available on phone only. Use the web version to manage KPIs directly.</Text>
+          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss}>
+            <Text style={styles.dismissButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const handleContactPress = (contact: any) => {
     const phoneNumber =

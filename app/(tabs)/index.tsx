@@ -350,6 +350,27 @@ export default function HomeScreen() {
     </SectionCard>
   );
 
+  const copilotPanel = (
+    <SectionCard style={styles.copilotCard}>
+      <View style={styles.copilotRow}>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          <Text style={styles.copilotLabel}>Copilot</Text>
+          <Text style={styles.copilotTitle}>Get today&apos;s guided next steps</Text>
+          <Text style={styles.copilotHint}>
+            Review priorities, weak areas, relationship follow-ups, and missing KPI entries.
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.copilotButton}
+          onPress={() => router.push('/copilot')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.copilotButtonText}>Open</Text>
+        </TouchableOpacity>
+      </View>
+    </SectionCard>
+  );
+
   // ── Insights panel (shared) ──
   const insightsPanel = (
     <View style={[styles.insightsCard, isLandscape && !deviceType.includes('desktop') ? { flex: 1 } : {}]}>
@@ -413,6 +434,7 @@ export default function HomeScreen() {
           <Text style={styles.screenTitle}>Life status</Text>
           <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
 
+          {copilotPanel}
           {testingPanel}
 
           <View style={styles.desktopTopRow}>
@@ -453,6 +475,7 @@ export default function HomeScreen() {
           <Text style={styles.screenTitle}>Life status</Text>
           <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
 
+          {copilotPanel}
           {testingPanel}
 
           {isLandscape ? (
@@ -513,6 +536,50 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     marginBottom: 20,
     backgroundColor: '#0f172a',
+  },
+  copilotCard: {
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1e3a8a',
+    marginBottom: 20,
+    backgroundColor: '#0f1b33',
+  },
+  copilotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  copilotLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  copilotTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#f8fafc',
+    marginBottom: 4,
+  },
+  copilotHint: {
+    fontSize: 14,
+    color: '#cbd5e1',
+    lineHeight: 20,
+  },
+  copilotButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copilotButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   testingLabel: {
     fontSize: 10,

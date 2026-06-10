@@ -36,6 +36,9 @@ export function DesktopShell({ children, title }: DesktopShellProps) {
         <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/weekly')}>
           <Text style={styles.navText}>Weekly</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/copilot')}>
+          <Text style={styles.navText}>Copilot</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/templates')}>
           <Text style={styles.navText}>Templates</Text>
         </TouchableOpacity>
