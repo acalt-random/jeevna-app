@@ -59,6 +59,11 @@ Implemented feature areas:
   - Weekly category averages
   - Native share summary flow
 
+- Life Buddy assistant
+  - Rule-based recommendation screen built from local app data
+  - Surfaces today's priorities, weak categories, missing KPI entries, and relationship follow-ups
+  - Preserves offline behavior with no external AI dependency
+
 - Template packs
   - Install starter category/KPI packs
   - Duplicate-aware category and KPI insertion
@@ -211,6 +216,9 @@ The app uses Expo Router with a root stack and tab-based primary navigation.
 - `app/category/[categoryName].tsx`
   - Category detail page
   - Also hosts relationship CRM when category name includes "relationship", "people", or "social"
+
+- `app/life-buddy.tsx`
+  - Rule-based assistant screen for priorities, suggestions, and follow-up prompts
 
 - `app/onboarding.tsx`
   - Welcome screen pointing to `/templates`

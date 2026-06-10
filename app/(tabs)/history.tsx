@@ -169,6 +169,101 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  date: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f8fafc',
+  },
+  score: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#93c5fd',
+  },
+  rowHint: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  chartTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#e2e8f0',
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  chartCard: {
+    paddingVertical: 18,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  chartColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  chartTrack: {
+    width: '100%',
+    maxWidth: 32,
+    justifyContent: 'flex-end',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  chartBar: {
+    width: '100%',
+    backgroundColor: '#3b82f6',
+    borderRadius: 10,
+  },
+  chartDateLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginBottom: 4,
+  },
+  chartScoreLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#f1f5f9',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 18,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#f8fafc',
+    marginBottom: 6,
+  },
+  modalScore: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#93c5fd',
+    marginBottom: 14,
+  },
   modalScroll: {
     maxHeight: 360,
   },

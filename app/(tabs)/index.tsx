@@ -350,22 +350,22 @@ export default function HomeScreen() {
     </SectionCard>
   );
 
-  const copilotPanel = (
-    <SectionCard style={styles.copilotCard}>
-      <View style={styles.copilotRow}>
+  const lifeBuddyPanel = (
+    <SectionCard style={styles.lifeBuddyCard}>
+      <View style={styles.lifeBuddyRow}>
         <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text style={styles.copilotLabel}>Copilot</Text>
-          <Text style={styles.copilotTitle}>Get today&apos;s guided next steps</Text>
-          <Text style={styles.copilotHint}>
+          <Text style={styles.lifeBuddyLabel}>Life Buddy</Text>
+          <Text style={styles.lifeBuddyTitle}>Get today&apos;s guided next steps</Text>
+          <Text style={styles.lifeBuddyHint}>
             Review priorities, weak areas, relationship follow-ups, and missing KPI entries.
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.copilotButton}
-          onPress={() => router.push('/copilot')}
+          style={styles.lifeBuddyButton}
+          onPress={() => router.push('/life-buddy')}
           activeOpacity={0.8}
         >
-          <Text style={styles.copilotButtonText}>Open</Text>
+          <Text style={styles.lifeBuddyButtonText}>Open Life Buddy</Text>
         </TouchableOpacity>
       </View>
     </SectionCard>
@@ -434,7 +434,7 @@ export default function HomeScreen() {
           <Text style={styles.screenTitle}>Life status</Text>
           <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
 
-          {copilotPanel}
+          {lifeBuddyPanel}
           {testingPanel}
 
           <View style={styles.desktopTopRow}>
@@ -475,7 +475,7 @@ export default function HomeScreen() {
           <Text style={styles.screenTitle}>Life status</Text>
           <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
 
-          {copilotPanel}
+          {lifeBuddyPanel}
           {testingPanel}
 
           {isLandscape ? (
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: '#0f172a',
   },
-  copilotCard: {
+  lifeBuddyCard: {
     borderRadius: 10,
     padding: 14,
     borderWidth: 1,
@@ -545,11 +545,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: '#0f1b33',
   },
-  copilotRow: {
+  lifeBuddyRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  copilotLabel: {
+  lifeBuddyLabel: {
     fontSize: 10,
     fontWeight: '700',
     color: '#93c5fd',
@@ -557,18 +557,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
-  copilotTitle: {
+  lifeBuddyTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#f8fafc',
     marginBottom: 4,
   },
-  copilotHint: {
+  lifeBuddyHint: {
     fontSize: 14,
     color: '#cbd5e1',
     lineHeight: 20,
   },
-  copilotButton: {
+  lifeBuddyButton: {
     backgroundColor: '#2563eb',
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  copilotButtonText: {
+  lifeBuddyButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',

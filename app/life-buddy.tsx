@@ -124,7 +124,7 @@ function PriorityCard({ item }: { item: PriorityItem }) {
   );
 }
 
-export default function CopilotScreen() {
+export default function LifeBuddyScreen() {
   const {
     categories,
     kpis,
@@ -144,7 +144,9 @@ export default function CopilotScreen() {
     return entries.find((entry) => entry.date === today) ?? null;
   }, [entries, today]);
 
-  const todayActuals = todayEntry?.actuals ?? {};
+  const todayActuals = useMemo(() => {
+    return todayEntry?.actuals ?? {};
+  }, [todayEntry]);
 
   const weakestCategory = useMemo<WeakCategory>(() => {
     const rows = categories
@@ -353,7 +355,7 @@ export default function CopilotScreen() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
       <PageContainer>
         <PageHeader
-          title="Copilot"
+          title="Life Buddy"
           subtitle="Rule-based guidance from your Life KPI data."
         />
 
@@ -379,7 +381,7 @@ export default function CopilotScreen() {
         {todaysPriorities.length === 0 ? (
           <EmptyState
             title="Nothing urgent right now"
-            message="You're caught up for today. Copilot has no immediate priorities to surface."
+            message="You're caught up for today. Life Buddy has no immediate priorities to surface."
           />
         ) : (
           <ResponsiveGrid>
@@ -434,7 +436,7 @@ export default function CopilotScreen() {
         {!weakestCategory ? (
           <EmptyState
             title="No category insight yet"
-            message="Add categories and KPIs to let Copilot identify a weak category."
+            message="Add categories and KPIs to let Life Buddy identify a weak category."
           />
         ) : (
           <SectionCard>
@@ -466,7 +468,7 @@ export default function CopilotScreen() {
         {suggestedActions.length === 0 ? (
           <EmptyState
             title="No suggestions to show"
-            message="Copilot has nothing new to recommend from your current data."
+            message="Life Buddy has nothing new to recommend from your current data."
           />
         ) : (
           suggestedActions.map((suggestion, index) => (
@@ -480,7 +482,7 @@ export default function CopilotScreen() {
   );
 
   if (deviceType === 'desktop') {
-    return <DesktopShell title="Copilot">{pageContent}</DesktopShell>;
+    return <DesktopShell title="Life Buddy">{pageContent}</DesktopShell>;
   }
 
   return <SafeAreaView style={styles.screen}>{pageContent}</SafeAreaView>;
