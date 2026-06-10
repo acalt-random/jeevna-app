@@ -1,5 +1,6 @@
+import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 interface PageHeaderProps {
   title: string;
@@ -8,28 +9,29 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, style }: PageHeaderProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={[styles.container, style]}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    <View style={[{ marginBottom: theme.spacing.xl, paddingTop: 8 }, style]}>
+      <Text
+        style={{
+          fontSize: 30,
+          fontWeight: '800',
+          color: theme.textPrimary,
+          marginBottom: 6,
+        }}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text
+          style={{
+            fontSize: 15,
+            color: theme.textSecondary,
+            lineHeight: 22,
+          }}>
+          {subtitle}
+        </Text>
+      ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 24,
-    paddingTop: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#94a3b8',
-    lineHeight: 22,
-  },
-});

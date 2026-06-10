@@ -1,28 +1,38 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { createNavigationTheme } from '@/constants/themes';
 import { AppDataProvider } from '@/context/AppDataContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AppThemeProvider, useTheme } from '@/context/ThemeContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+function RootNavigator() {
+  const { theme } = useTheme();
 
   return (
-    <AppDataProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="life-buddy" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AppDataProvider>
+    <NavigationThemeProvider value={createNavigationTheme(theme)}>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="life-buddy" options={{ headerShown: false }} />
+        <Stack.Screen name="preferences" options={{ headerShown: false }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      </Stack>
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+    </NavigationThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppThemeProvider>
+      <AppDataProvider>
+        <RootNavigator />
+      </AppDataProvider>
+    </AppThemeProvider>
   );
 }

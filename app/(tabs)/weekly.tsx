@@ -6,6 +6,7 @@ import { ResponsiveGrid } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
 import { StatCard } from '@/components/StatCard';
 import { KPI, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import React, { useMemo } from 'react';
 import { Alert, SafeAreaView, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -100,6 +101,7 @@ function buildWeeklyShareText(s: ShareStats): string {
 
 export default function WeeklySummaryScreen() {
   const { entries, categories, kpis } = useAppData();
+  const { theme } = useTheme();
   const deviceType = useDeviceType();
 
   const stats = useMemo(() => {
@@ -184,8 +186,12 @@ export default function WeeklySummaryScreen() {
           subtitle="Last 7 days of entries, averaged and compared."
         />
 
-          <TouchableOpacity style={styles.shareButton} onPress={handleShareSummary} activeOpacity={0.8}>
-            <Text style={styles.shareButtonText}>Share summary</Text>
+          <TouchableOpacity
+            style={[styles.shareButton, { borderColor: theme.primary, backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]}
+            onPress={handleShareSummary}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.shareButtonText, { color: theme.primary }]}>Share summary</Text>
           </TouchableOpacity>
 
           {stats.daysWithData === 0 ? (
@@ -214,8 +220,8 @@ export default function WeeklySummaryScreen() {
                 />
               </ResponsiveGrid>
 
-              <Text style={styles.sectionTitle}>Category averages (week)</Text>
-              <Text style={styles.sectionHint}>Averaged over days you saved an entry this week.</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Category averages (week)</Text>
+              <Text style={[styles.sectionHint, { color: theme.textMuted }]}>Averaged over days you saved an entry this week.</Text>
 
               {stats.categoryRows.filter((r) => r.hasKpis).length === 0 ? (
                 <EmptyState
@@ -228,8 +234,8 @@ export default function WeeklySummaryScreen() {
                   .map((row) => (
                     <SectionCard key={row.id}>
                       <View style={styles.catRow}>
-                        <Text style={styles.catName}>{row.name}</Text>
-                        <Text style={styles.catAvg}>
+                        <Text style={[styles.catName, { color: theme.textPrimary }]}>{row.name}</Text>
+                        <Text style={[styles.catAvg, { color: theme.textSecondary }]}>
                           {row.avg !== null ? `${row.avg} / 100` : 'No data this week'}
                         </Text>
                       </View>
@@ -237,14 +243,14 @@ export default function WeeklySummaryScreen() {
                   ))
               )}
 
-              <Text style={styles.sectionTitle}>Weekly insights</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Weekly insights</Text>
               <SectionCard>
-                <Text style={styles.insightLabel}>Weakest category</Text>
-                <Text style={styles.insightValue}>
+                <Text style={[styles.insightLabel, { color: theme.primary }]}>Weakest category</Text>
+                <Text style={[styles.insightValue, { color: theme.textPrimary }]}>
                   {stats.weakest ? `${stats.weakest.name} (${stats.weakest.avg} / 100 avg)` : 'Not enough category data yet'}
                 </Text>
-                <Text style={[styles.insightLabel, styles.insightSpacer]}>Strongest category</Text>
-                <Text style={styles.insightValue}>
+                <Text style={[styles.insightLabel, styles.insightSpacer, { color: theme.primary }]}>Strongest category</Text>
+                <Text style={[styles.insightValue, { color: theme.textPrimary }]}>
                   {stats.strongest
                     ? `${stats.strongest.name} (${stats.strongest.avg} / 100 avg)`
                     : 'Not enough category data yet'}
@@ -265,7 +271,7 @@ export default function WeeklySummaryScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {pageContent}
     </SafeAreaView>
   );

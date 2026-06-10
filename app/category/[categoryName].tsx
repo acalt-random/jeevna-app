@@ -2,6 +2,7 @@ import { ContactPicker, SelectedContact } from '@/components/ContactPicker';
 import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { KPI, PEOPLE_GROUPS, Person, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -43,6 +44,7 @@ function formatDisplayDate(value: string): string {
 
 export default function CategoryDetailScreen() {
   const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, personTodos, addPersonTodo, updatePersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
+  const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [showContactPicker, setShowContactPicker] = useState(false);
@@ -330,14 +332,14 @@ export default function CategoryDetailScreen() {
 
   if (!categoryName || !category) {
     return (
-      <SafeAreaView style={styles.screen}>
+      <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
           <PageContainer>
             <EmptyState
               title="Category not found"
               message="Choose a category from the dashboard or add a new one."
             />
-            <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)')}>
+            <TouchableOpacity style={[styles.backButton, { backgroundColor: theme.buttonSecondary, borderColor: theme.cardBorder }]} onPress={() => router.push('/(tabs)')}>
               <Text style={styles.backButtonText}>Return to Home</Text>
             </TouchableOpacity>
           </PageContainer>
@@ -347,43 +349,43 @@ export default function CategoryDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <PageContainer>
           <View style={styles.headerRow}>
             <View style={styles.titleColumn}>
-              <Text style={styles.title}>{category.name}</Text>
-              <Text style={styles.subtitle}>Only KPIs and subtasks for this category</Text>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>{category.name}</Text>
+              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Only KPIs and subtasks for this category</Text>
             </View>
-            <TouchableOpacity style={styles.backButtonCompact} onPress={() => router.push('/(tabs)')}>
+            <TouchableOpacity style={[styles.backButtonCompact, { backgroundColor: theme.buttonSecondary, borderColor: theme.cardBorder }]} onPress={() => router.push('/(tabs)')}>
               <Text style={styles.backButtonText}>Home</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Category score</Text>
+          <View style={[styles.summaryCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
+            <Text style={[styles.summaryLabel, { color: theme.textMuted }]}>Category score</Text>
             <Text style={[styles.summaryScore, { color: status.color }]}>{categoryScore} / 100</Text>
-            <View style={styles.progressTrack}>
+            <View style={[styles.progressTrack, { backgroundColor: theme.inputBackground }]}>
               <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, categoryScore))}%`, backgroundColor: status.barColor }]} />
             </View>
-            <Text style={styles.statusLabel}>{status.label}</Text>
-            <Text style={styles.detailLine}>Tracked days: {entries.length}</Text>
-            <Text style={styles.detailLine}>KPIs in category: {categoryKpis.length}</Text>
-            <Text style={styles.detailLine}>To-dos completed today: {categoryTodoProgress.completed} / {categoryTodoProgress.total} ({categoryTodoProgress.percent}%)</Text>
+            <Text style={[styles.statusLabel, { color: theme.textSecondary }]}>{status.label}</Text>
+            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>Tracked days: {entries.length}</Text>
+            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>KPIs in category: {categoryKpis.length}</Text>
+            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>To-dos completed today: {categoryTodoProgress.completed} / {categoryTodoProgress.total} ({categoryTodoProgress.percent}%)</Text>
           </View>
 
           {isRelationshipsCategory && (
-            <View style={styles.attentionSection}>
-              <Text style={styles.attentionTitle}>People Needing Attention</Text>
+            <View style={[styles.attentionSection, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
+              <Text style={[styles.attentionTitle, { color: theme.textPrimary }]}>People Needing Attention</Text>
               {peopleNeedingAttention.length === 0 ? (
-                <Text style={styles.attentionMessage}>All relationships are healthy</Text>
+                <Text style={[styles.attentionMessage, { color: theme.textSecondary }]}>All relationships are healthy</Text>
               ) : (
                 peopleNeedingAttention.map(({ person, score }) => {
                   const lastContactDays = person.lastContactDate
                     ? Math.floor((new Date().getTime() - new Date(person.lastContactDate).getTime()) / (1000 * 60 * 60 * 24))
                     : null;
                   return (
-                    <View key={person.id} style={styles.attentionRow}>
+                    <View key={person.id} style={[styles.attentionRow, { backgroundColor: theme.inputBackground, borderRadius: theme.borderRadius.md }]}>
                       <View style={styles.attentionMain}>
                         <Text style={styles.attentionName}>{person.name}</Text>
                         <Text style={styles.attentionMeta}>{person.groupName} · {lastContactDays !== null ? `${lastContactDays} days ago` : 'No contact date'}</Text>
@@ -399,9 +401,9 @@ export default function CategoryDetailScreen() {
           {isRelationshipsCategory && (
             <View style={styles.peopleSection}>
               <View style={styles.peopleSectionHeader}>
-                <Text style={styles.peopleSectionTitle}>Relationships</Text>
+                <Text style={[styles.peopleSectionTitle, { color: theme.textPrimary }]}>Relationships</Text>
                 <TouchableOpacity
-                  style={styles.addPersonButton}
+                  style={[styles.addPersonButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.sm }]}
                   onPress={() => setShowAddPersonModal(true)}
                 >
                   <Text style={styles.addPersonButtonText}>+ Add Person</Text>
@@ -416,6 +418,7 @@ export default function CategoryDetailScreen() {
                         key={group}
                         style={[
                           styles.filterButton,
+                          { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                           selectedGroupFilter === group && styles.filterButtonActive,
                         ]}
                         onPress={() => setSelectedGroupFilter(group)}
@@ -423,6 +426,7 @@ export default function CategoryDetailScreen() {
                         <Text
                           style={[
                             styles.filterButtonText,
+                            { color: theme.textSecondary },
                             selectedGroupFilter === group && styles.filterButtonTextActive,
                           ]}
                         >
@@ -442,16 +446,16 @@ export default function CategoryDetailScreen() {
                             const scoreStatus = score >= 80 ? { color: '#34d399' } : score >= 50 ? { color: '#fbbf24' } : { color: '#fb7185' };
                             const recentActivities = getActivitiesForPerson(person.id).slice(0, 3);
                             return (
-                              <View key={person.id} style={styles.personCard}>
+                              <View key={person.id} style={[styles.personCard, { backgroundColor: theme.cardBackground, borderLeftColor: theme.primary, borderRadius: theme.borderRadius.md }]}>
                                 <View style={styles.personCardHeader}>
-                                  <Text style={styles.personName}>{person.name}</Text>
+                                  <Text style={[styles.personName, { color: theme.textPrimary }]}>{person.name}</Text>
                                   <TouchableOpacity onPress={() => deletePerson(person.id)}>
                                     <Text style={styles.personRemoveButton}>×</Text>
                                   </TouchableOpacity>
                                 </View>
-                                <Text style={styles.personRelationType}>{person.relationshipType}</Text>
+                                <Text style={[styles.personRelationType, { color: theme.textSecondary }]}>{person.relationshipType}</Text>
                                 {person.lastContactDate && (
-                                  <Text style={styles.personLastContact}>Last: {person.lastContactDate}</Text>
+                                  <Text style={[styles.personLastContact, { color: theme.textMuted }]}>Last: {person.lastContactDate}</Text>
                                 )}
                                 <View style={styles.personScore}>
                                   <Text style={[styles.personScoreLabel, scoreStatus]}>
@@ -459,34 +463,34 @@ export default function CategoryDetailScreen() {
                                   </Text>
                                 </View>
                                 {person.phone && (
-                                  <Text style={styles.personPhone}>{person.phone}</Text>
+                                  <Text style={[styles.personPhone, { color: theme.textMuted }]}>{person.phone}</Text>
                                 )}
                                 <View style={styles.personActionRow}>
                                   <TouchableOpacity
-                                    style={styles.personActionButton}
+                                    style={[styles.personActionButton, { backgroundColor: theme.success, borderRadius: theme.borderRadius.sm }]}
                                     onPress={() => handleContactedToday(person)}
                                   >
                                     <Text style={styles.personActionText}>Contacted Today</Text>
                                   </TouchableOpacity>
                                   <TouchableOpacity
-                                    style={styles.personActionButtonSecondary}
+                                    style={[styles.personActionButtonSecondary, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.sm }]}
                                     onPress={() => handleStartAddActivity(person.id)}
                                   >
                                     <Text style={styles.personActionText}>Add Activity</Text>
                                   </TouchableOpacity>
                                 </View>
                                 <View style={styles.activityHistorySection}>
-                                  <Text style={styles.activityHistoryLabel}>Recent activity</Text>
+                                  <Text style={[styles.activityHistoryLabel, { color: theme.textSecondary }]}>Recent activity</Text>
                                   {recentActivities.length > 0 ? (
                                     recentActivities.map((activity) => (
-                                      <View key={activity.id} style={styles.activityHistoryRow}>
-                                        <Text style={styles.activityHistoryText}>
+                                      <View key={activity.id} style={[styles.activityHistoryRow, { backgroundColor: theme.inputBackground, borderRadius: theme.borderRadius.sm }]}>
+                                        <Text style={[styles.activityHistoryText, { color: theme.textSecondary }]}>
                                           {formatDisplayDate(activity.date)} - {activity.activityType} - {activity.notes ?? 'No notes'}
                                         </Text>
                                       </View>
                                     ))
                                   ) : (
-                                    <Text style={styles.activityHistoryText}>No activity yet</Text>
+                                    <Text style={[styles.activityHistoryText, { color: theme.textSecondary }]}>No activity yet</Text>
                                   )}
                                 </View>
                                 <View style={styles.personTodoSection}>
@@ -561,29 +565,29 @@ export default function CategoryDetailScreen() {
               const kpiPeopleTodos = getPeopleTodosForKpi(kpi.id);
 
               return (
-                <View key={kpi.id} style={styles.kpiCard}>
+                <View key={kpi.id} style={[styles.kpiCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
                   <View style={styles.kpiHeader}>
-                    <Text style={styles.kpiName}>{kpi.name}</Text>
+                    <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
                     <Text style={[styles.kpiScore, { color: status.color }]}>{kpiScore} / {kpi.weight}</Text>
                   </View>
                   <View style={styles.kpiMetaRow}>
-                    <Text style={styles.kpiMeta}>Target: {kpi.target} {kpi.unit}</Text>
-                    <Text style={styles.kpiMeta}>Weight: {kpi.weight}</Text>
+                    <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Target: {kpi.target} {kpi.unit}</Text>
+                    <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Weight: {kpi.weight}</Text>
                   </View>
-                  <Text style={styles.kpiMeta}>Latest actual: {latestActual ? `${latestActual} ${kpi.unit}` : 'Not set'}</Text>
+                  <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Latest actual: {latestActual ? `${latestActual} ${kpi.unit}` : 'Not set'}</Text>
                   {kpiSubtasks.length > 0 && (
                     <View style={styles.todoProgress}>
-                      <Text style={styles.todoProgressText}>
+                      <Text style={[styles.todoProgressText, { color: theme.textSecondary }]}>
                         To-dos: {completedCount} / {totalCount} ({percent}%)
                       </Text>
-                      <View style={styles.todoProgressTrack}>
-                        <View style={[styles.todoProgressFill, { width: `${percent}%` }]} />
+                      <View style={[styles.todoProgressTrack, { backgroundColor: theme.inputBackground }]}>
+                        <View style={[styles.todoProgressFill, { width: `${percent}%`, backgroundColor: theme.buttonPrimary }]} />
                       </View>
                     </View>
                   )}
                   {kpiSubtasks.length > 0 ? (
-                    <View style={styles.subtaskSection}>
-                      <Text style={styles.subtaskTitle}>To-dos</Text>
+                    <View style={[styles.subtaskSection, { borderTopColor: theme.cardBorder }]}>
+                      <Text style={[styles.subtaskTitle, { color: theme.textMuted }]}>To-dos</Text>
                       {kpiSubtasks.map((subtask) => {
                         const isCompleted = subtaskLogs.some(
                           (log) => log.subtaskId === subtask.id && log.date === today && log.completed
@@ -607,17 +611,17 @@ export default function CategoryDetailScreen() {
                       })}
                     </View>
                   ) : (
-                    <Text style={styles.noSubtasks}>No To-dos yet</Text>
+                    <Text style={[styles.noSubtasks, { color: theme.textMuted }]}>No To-dos yet</Text>
                   )}
                   {isSocialCategory && (
                     <View style={styles.peopleTodoSection}>
-                      <Text style={styles.peopleTodoTitle}>People To-dos</Text>
+                      <Text style={[styles.peopleTodoTitle, { color: theme.textPrimary }]}>People To-dos</Text>
                       {kpiPeopleTodos.length > 0 ? (
                         kpiPeopleTodos.map((todo) => (
-                          <View key={todo.id} style={styles.peopleTodoRow}>
+                          <View key={todo.id} style={[styles.peopleTodoRow, { backgroundColor: theme.inputBackground, borderRadius: theme.borderRadius.sm }]}>
                             <View style={styles.peopleTodoMain}>
-                              <Text style={styles.peopleTodoName}>{todo.contactName}</Text>
-                              <Text style={styles.peopleTodoMeta}>
+                              <Text style={[styles.peopleTodoName, { color: theme.textPrimary }]}>{todo.contactName}</Text>
+                              <Text style={[styles.peopleTodoMeta, { color: theme.textSecondary }]}>
                                 {todo.activityType} · {todo.frequency} · target {todo.targetCount}
                               </Text>
                               {(todo.contactPhone || todo.contactEmail) && (
@@ -626,17 +630,17 @@ export default function CategoryDetailScreen() {
                             </View>
                             <TouchableOpacity
                               onPress={() => deletePeopleTodo(todo.id)}
-                              style={styles.removeContactButton}
+                              style={[styles.removeContactButton, { backgroundColor: theme.danger }]}
                             >
                               <Text style={styles.removeContactText}>×</Text>
                             </TouchableOpacity>
                           </View>
                         ))
                       ) : (
-                        <Text style={styles.noPeopleTodos}>No People To-dos yet</Text>
+                        <Text style={[styles.noPeopleTodos, { color: theme.textMuted }]}>No People To-dos yet</Text>
                       )}
                       <TouchableOpacity
-                        style={styles.addContactButton}
+                        style={[styles.addContactButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.sm }]}
                         onPress={() => handleAddContact(kpi.id)}
                       >
                         <Text style={styles.addContactText}>+ Add People To-do</Text>
@@ -651,20 +655,20 @@ export default function CategoryDetailScreen() {
       </ScrollView>
       {showPeopleTodoForm && selectedContactForTodo && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.xl }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add People To-do</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Add People To-do</Text>
               <TouchableOpacity onPress={handleCancelPeopleTodo}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalLabel}>Contact</Text>
-            <Text style={styles.modalText}>{selectedContactForTodo.name}</Text>
+            <Text style={[styles.modalLabel, { color: theme.textMuted }]}>Contact</Text>
+            <Text style={[styles.modalText, { color: theme.textSecondary }]}>{selectedContactForTodo.name}</Text>
             {selectedContactForTodo.phoneNumber ? (
-              <Text style={styles.modalText}>{selectedContactForTodo.phoneNumber}</Text>
+              <Text style={[styles.modalText, { color: theme.textSecondary }]}>{selectedContactForTodo.phoneNumber}</Text>
             ) : null}
             {selectedContactForTodo.email ? (
-              <Text style={styles.modalText}>{selectedContactForTodo.email}</Text>
+              <Text style={[styles.modalText, { color: theme.textSecondary }]}>{selectedContactForTodo.email}</Text>
             ) : null}
 
             <Text style={styles.modalLabel}>Activity type</Text>
@@ -674,6 +678,7 @@ export default function CategoryDetailScreen() {
                   key={type}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     peopleTodoActivityType === type && styles.optionButtonActive,
                   ]}
                   onPress={() => setPeopleTodoActivityType(type as any)}
@@ -681,6 +686,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       peopleTodoActivityType === type && styles.optionButtonTextActive,
                     ]}
                   >
@@ -697,6 +703,7 @@ export default function CategoryDetailScreen() {
                   key={freq}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     peopleTodoFrequency === freq && styles.optionButtonActive,
                   ]}
                   onPress={() => setPeopleTodoFrequency(freq as any)}
@@ -704,6 +711,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       peopleTodoFrequency === freq && styles.optionButtonTextActive,
                     ]}
                   >
@@ -715,28 +723,28 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Target count</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               value={peopleTodoTargetCount}
               onChangeText={setPeopleTodoTargetCount}
               keyboardType="numeric"
               placeholder="1"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSavePeopleTodo}>
+            <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleSavePeopleTodo}>
               <Text style={styles.saveButtonText}>Save To-do</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dismissButton} onPress={handleCancelPeopleTodo}>
-              <Text style={styles.dismissButtonText}>Cancel</Text>
+            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]} onPress={handleCancelPeopleTodo}>
+              <Text style={[styles.dismissButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
       {showActivityModal && selectedPersonForActivity && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.xl }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Relationship Activity</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Add Relationship Activity</Text>
               <TouchableOpacity onPress={handleCancelActivity}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
@@ -749,6 +757,7 @@ export default function CategoryDetailScreen() {
                   key={type}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     activityType === type && styles.optionButtonActive,
                   ]}
                   onPress={() => setActivityType(type as any)}
@@ -756,6 +765,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       activityType === type && styles.optionButtonTextActive,
                     ]}
                   >
@@ -767,37 +777,37 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Date</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={activityDate}
               onChangeText={setActivityDate}
             />
 
             <Text style={styles.modalLabel}>Notes</Text>
             <TextInput
-              style={[styles.input, { minHeight: 80 }]}
+              style={[styles.input, { minHeight: 80, borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Notes (optional)"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={activityNotes}
               onChangeText={setActivityNotes}
               multiline
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveActivity}>
+            <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleSaveActivity}>
               <Text style={styles.saveButtonText}>Save Activity</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dismissButton} onPress={handleCancelActivity}>
-              <Text style={styles.dismissButtonText}>Cancel</Text>
+            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]} onPress={handleCancelActivity}>
+              <Text style={[styles.dismissButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
       {showPersonTodoModal && selectedPersonForTodo && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.xl }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Relationship To-Do</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Add Relationship To-Do</Text>
               <TouchableOpacity onPress={handleCancelPersonTodo}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
@@ -805,9 +815,9 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Title *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Enter to-do title"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={todoTitle}
               onChangeText={setTodoTitle}
             />
@@ -819,6 +829,7 @@ export default function CategoryDetailScreen() {
                   key={freq}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     todoFrequency === freq && styles.optionButtonActive,
                   ]}
                   onPress={() => setTodoFrequency(freq as any)}
@@ -826,6 +837,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       todoFrequency === freq && styles.optionButtonTextActive,
                     ]}
                   >
@@ -837,28 +849,28 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Due Date (optional)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={todoDueDate}
               onChangeText={setTodoDueDate}
             />
 
             <Text style={styles.modalLabel}>Notes</Text>
             <TextInput
-              style={[styles.input, { minHeight: 80 }]}
+              style={[styles.input, { minHeight: 80, borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Notes (optional)"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={todoNotes}
               onChangeText={setTodoNotes}
               multiline
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSavePersonTodo}>
+            <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleSavePersonTodo}>
               <Text style={styles.saveButtonText}>Save To-Do</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dismissButton} onPress={handleCancelPersonTodo}>
-              <Text style={styles.dismissButtonText}>Cancel</Text>
+            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]} onPress={handleCancelPersonTodo}>
+              <Text style={[styles.dismissButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -871,9 +883,9 @@ export default function CategoryDetailScreen() {
       )}
       {showAddPersonModal && (
         <View style={styles.modalOverlay}>
-          <View style={styles.addPersonModalCard}>
+          <View style={[styles.addPersonModalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.xl }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Person</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Add Person</Text>
               <TouchableOpacity onPress={() => setShowAddPersonModal(false)}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
@@ -881,9 +893,9 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Name *</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Enter name"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={personName}
               onChangeText={setPersonName}
             />
@@ -895,6 +907,7 @@ export default function CategoryDetailScreen() {
                   key={type}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     relationshipType === type && styles.optionButtonActive,
                   ]}
                   onPress={() => setRelationshipType(type)}
@@ -902,6 +915,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       relationshipType === type && styles.optionButtonTextActive,
                     ]}
                   >
@@ -918,6 +932,7 @@ export default function CategoryDetailScreen() {
                   key={group}
                   style={[
                     styles.optionButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.buttonSecondary },
                     personGroup === group && styles.optionButtonActive,
                   ]}
                   onPress={() => setPersonGroup(group)}
@@ -925,6 +940,7 @@ export default function CategoryDetailScreen() {
                   <Text
                     style={[
                       styles.optionButtonText,
+                      { color: theme.textSecondary },
                       personGroup === group && styles.optionButtonTextActive,
                     ]}
                   >
@@ -934,27 +950,27 @@ export default function CategoryDetailScreen() {
               ))}
             </View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Or type a group"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={personGroup}
               onChangeText={setPersonGroup}
             />
 
             <Text style={styles.modalLabel}>Phone</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Phone number (optional)"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={personPhone}
               onChangeText={setPersonPhone}
             />
 
             <Text style={styles.modalLabel}>Notes</Text>
             <TextInput
-              style={[styles.input, { minHeight: 80 }]}
+              style={[styles.input, { minHeight: 80, borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="Notes (optional)"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={personNotes}
               onChangeText={setPersonNotes}
               multiline
@@ -962,29 +978,29 @@ export default function CategoryDetailScreen() {
 
             <Text style={styles.modalLabel}>Last Contact Date</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: theme.cardBorder, backgroundColor: theme.inputBackground, color: theme.textPrimary }]}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#64748b"
+              placeholderTextColor={theme.textMuted}
               value={personLastContact}
               onChangeText={setPersonLastContact}
             />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleAddPerson}>
+            <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleAddPerson}>
               <Text style={styles.saveButtonText}>Add Person</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.dismissButton, { marginTop: 0, marginBottom: 12 }]}
+              style={[styles.dismissButton, { marginTop: 0, marginBottom: 12, backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]}
               onPress={() => {
                 setShowAddPersonModal(false);
                 setShowContactPicker(true);
               }}
             >
-              <Text style={styles.dismissButtonText}>+ Import from Contacts</Text>
+              <Text style={[styles.dismissButtonText, { color: theme.textSecondary }]}>+ Import from Contacts</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.dismissButton} onPress={() => setShowAddPersonModal(false)}>
-              <Text style={styles.dismissButtonText}>Cancel</Text>
+            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]} onPress={() => setShowAddPersonModal(false)}>
+              <Text style={[styles.dismissButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>

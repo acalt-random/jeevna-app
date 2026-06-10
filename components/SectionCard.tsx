@@ -1,5 +1,6 @@
+import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 interface SectionCardProps {
   children: React.ReactNode;
@@ -7,20 +8,27 @@ interface SectionCardProps {
 }
 
 export function SectionCard({ children, style }: SectionCardProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={[styles.card, style]}>
+    <View
+      style={[
+        {
+          backgroundColor: theme.cardBackground,
+          borderRadius: theme.borderRadius.lg,
+          padding: theme.spacing.md,
+          borderWidth: 1,
+          borderColor: theme.cardBorder,
+          marginBottom: theme.spacing.md,
+          shadowColor: theme.shadowColor,
+          shadowOpacity: theme.shadowOpacity,
+          shadowRadius: theme.shadowRadius,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: theme.elevation,
+        },
+        style,
+      ]}>
       {children}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 16,
-  },
-});

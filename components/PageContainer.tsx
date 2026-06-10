@@ -1,6 +1,7 @@
 import { useDeviceType } from '@/hooks/useDeviceType';
+import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 interface PageContainerProps {
   children: React.ReactNode;
@@ -9,11 +10,31 @@ interface PageContainerProps {
 
 export function PageContainer({ children, style }: PageContainerProps) {
   const deviceType = useDeviceType();
+  const { theme } = useTheme();
 
   return (
-    <View style={[styles.container, deviceType === 'web' && styles.webContainer, style]}>
+    <View
+      style={[
+        {
+          width: '100%',
+          backgroundColor: theme.background,
+          padding: theme.spacing.lg,
+        },
+        deviceType === 'web'
+          ? {
+              alignItems: 'center',
+              padding: 0,
+            }
+          : null,
+        style,
+      ]}>
       {deviceType === 'web' ? (
-        <View style={styles.webContent}>
+        <View
+          style={{
+            width: '100%',
+            maxWidth: 1120,
+            padding: theme.spacing.xl,
+          }}>
           {children}
         </View>
       ) : (
@@ -22,20 +43,3 @@ export function PageContainer({ children, style }: PageContainerProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    backgroundColor: '#0f172a',
-    padding: 20,
-  },
-  webContainer: {
-    alignItems: 'center',
-    padding: 0,
-  },
-  webContent: {
-    width: '100%',
-    maxWidth: 1100,
-    padding: 20,
-  },
-});

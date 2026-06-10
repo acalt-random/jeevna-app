@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { Category, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import React, { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -13,6 +14,7 @@ export default function CategoryManagerScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteBlockedMessage, setDeleteBlockedMessage] = useState('');
   const { categories, addCategory, updateCategory, deleteCategory } = useAppData();
+  const { theme } = useTheme();
 
   const clearForm = () => {
     setCategoryName('');
@@ -63,23 +65,45 @@ export default function CategoryManagerScreen() {
         />
         <SectionCard>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+                color: theme.textPrimary,
+                backgroundColor: theme.inputBackground,
+              },
+            ]}
             value={categoryName}
             onChangeText={setCategoryName}
             placeholder="Enter category name"
-            placeholderTextColor="#888"
+            placeholderTextColor={theme.textMuted}
           />
-          <TouchableOpacity style={styles.button} onPress={handleSaveOrAddCategory}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]}
+            onPress={handleSaveOrAddCategory}
+          >
             <Text style={styles.buttonText}>{editingId ? 'Save Category' : 'Add Category'}</Text>
           </TouchableOpacity>
           {editingId ? (
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit} activeOpacity={0.7}>
-              <Text style={styles.cancelButtonText}>Cancel Edit</Text>
+            <TouchableOpacity
+              style={[
+                styles.cancelButton,
+                {
+                  borderColor: theme.cardBorder,
+                  borderRadius: theme.borderRadius.md,
+                  backgroundColor: theme.buttonSecondary,
+                },
+              ]}
+              onPress={handleCancelEdit}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel Edit</Text>
             </TouchableOpacity>
           ) : null}
         </SectionCard>
         {deleteBlockedMessage ? (
-          <Text style={styles.blockedMessage}>{deleteBlockedMessage}</Text>
+          <Text style={[styles.blockedMessage, { color: theme.danger }]}>{deleteBlockedMessage}</Text>
         ) : null}
         {categories.length === 0 ? (
           <EmptyState
@@ -89,21 +113,35 @@ export default function CategoryManagerScreen() {
         ) : (
           categories.map((item) => (
             <SectionCard key={item.id}>
-              <Text style={styles.categoryText}>{item.name}</Text>
+              <Text style={[styles.categoryText, { color: theme.textPrimary }]}>{item.name}</Text>
               <View style={styles.buttonRow}>
                 <TouchableOpacity
-                  style={styles.editButton}
+                  style={[
+                    styles.editButton,
+                    {
+                      borderColor: theme.primary,
+                      backgroundColor: theme.buttonSecondary,
+                      borderRadius: theme.borderRadius.sm,
+                    },
+                  ]}
                   onPress={() => handleStartEdit(item)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.editButtonText}>Edit</Text>
+                  <Text style={[styles.editButtonText, { color: theme.primary }]}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.deleteButton}
+                  style={[
+                    styles.deleteButton,
+                    {
+                      borderColor: theme.danger,
+                      backgroundColor: theme.buttonSecondary,
+                      borderRadius: theme.borderRadius.sm,
+                    },
+                  ]}
                   onPress={() => handleDeleteCategory(item.id)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
+                  <Text style={[styles.deleteButtonText, { color: theme.danger }]}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </SectionCard>
@@ -122,7 +160,7 @@ export default function CategoryManagerScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {pageContent}
     </SafeAreaView>
   );

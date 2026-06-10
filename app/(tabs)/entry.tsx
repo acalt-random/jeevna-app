@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -28,6 +29,7 @@ export default function EntryScreen() {
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [saveMessage, setSaveMessage] = useState('');
   const [score, setScore] = useState<number | null>(null);
+  const { theme } = useTheme();
 
   const sortedKpis = useMemo(() => {
     return [...kpis].sort((a, b) => a.category.localeCompare(b.category));
@@ -104,7 +106,7 @@ export default function EntryScreen() {
     }
 
     return (
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
         {noKpiContent}
       </SafeAreaView>
     );
@@ -120,31 +122,42 @@ export default function EntryScreen() {
 
           {sortedKpis.map((kpi) => (
             <SectionCard key={kpi.id}>
-              <Text style={styles.kpiName}>{kpi.name}</Text>
-              <Text style={styles.kpiMeta}>Category: {kpi.category}</Text>
-              <Text style={styles.kpiMeta}>
+              <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
+              <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Category: {kpi.category}</Text>
+              <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>
                 Target: {kpi.target} {kpi.unit}
               </Text>
-              <Text style={styles.kpiMeta}>Weight: {kpi.weight}</Text>
+              <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Weight: {kpi.weight}</Text>
 
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.inputBackground,
+                    color: theme.textPrimary,
+                    borderColor: theme.cardBorder,
+                    borderRadius: theme.borderRadius.md,
+                  },
+                ]}
                 value={actuals[kpi.id] || ''}
                 onChangeText={(value) => handleActualChange(kpi.id, value)}
                 keyboardType="numeric"
                 placeholder={`Enter actual (${kpi.unit})`}
-                placeholderTextColor="#888"
+                placeholderTextColor={theme.textMuted}
               />
             </SectionCard>
           ))}
 
-          <TouchableOpacity style={styles.button} onPress={handleSave}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]}
+            onPress={handleSave}
+          >
             <Text style={styles.buttonText}>Save</Text>
           </TouchableOpacity>
 
-          {saveMessage ? <Text style={styles.success}>{saveMessage}</Text> : null}
+          {saveMessage ? <Text style={[styles.success, { color: theme.success }]}>{saveMessage}</Text> : null}
           {score !== null ? (
-            <Text style={styles.score}>{"Today's Score:"} {score}/100</Text>
+            <Text style={[styles.score, { color: theme.textPrimary }]}>{"Today's Score:"} {score}/100</Text>
           ) : null}
         </PageContainer>
       </ScrollView>
@@ -155,7 +168,7 @@ export default function EntryScreen() {
       {mainContent}
     </DesktopShell>
   ) : (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {mainContent}
     </SafeAreaView>
   );

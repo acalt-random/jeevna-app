@@ -1,5 +1,6 @@
+import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 interface StatCardProps {
   title: string;
@@ -9,40 +10,56 @@ interface StatCardProps {
 }
 
 export function StatCard({ title, value, subtitle, style }: StatCardProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={[styles.card, style]}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.value}>{value}</Text>
-      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    <View
+      style={[
+        {
+          backgroundColor: theme.cardBackground,
+          borderRadius: theme.borderRadius.lg,
+          padding: theme.spacing.md,
+          borderWidth: 1,
+          borderColor: theme.cardBorder,
+          marginBottom: theme.spacing.sm,
+          shadowColor: theme.shadowColor,
+          shadowOpacity: theme.shadowOpacity * 0.9,
+          shadowRadius: theme.shadowRadius,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: theme.elevation,
+        },
+        style,
+      ]}>
+      <Text
+        style={{
+          fontSize: 12,
+          fontWeight: '700',
+          color: theme.textMuted,
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          marginBottom: theme.spacing.sm,
+        }}>
+        {title}
+      </Text>
+      <Text
+        style={{
+          fontSize: 26,
+          fontWeight: '800',
+          color: theme.textPrimary,
+          marginBottom: 4,
+        }}>
+        {value}
+      </Text>
+      {subtitle ? (
+        <Text
+          style={{
+            fontSize: 14,
+            color: theme.textSecondary,
+            lineHeight: 20,
+          }}>
+          {subtitle}
+        </Text>
+      ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 8,
-  },
-  value: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#f1f5f9',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-});

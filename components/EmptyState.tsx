@@ -1,5 +1,6 @@
+import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 interface EmptyStateProps {
   title: string;
@@ -8,41 +9,47 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ title, message, style }: EmptyStateProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={[styles.container, style]}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+    <View
+      style={[
+        {
+          padding: theme.spacing.xl,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.cardBackground,
+          borderRadius: theme.borderRadius.lg,
+          borderWidth: 1,
+          borderColor: theme.cardBorder,
+          marginBottom: theme.spacing.lg,
+          shadowColor: theme.shadowColor,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: theme.shadowOpacity,
+          shadowRadius: theme.shadowRadius,
+          elevation: theme.elevation,
+        },
+        style,
+      ]}>
+      <Text
+        style={{
+          fontSize: 20,
+          fontWeight: '800',
+          color: theme.textPrimary,
+          marginBottom: theme.spacing.sm,
+          textAlign: 'center',
+        }}>
+        {title}
+      </Text>
+      <Text
+        style={{
+          fontSize: 16,
+          color: theme.textSecondary,
+          textAlign: 'center',
+          lineHeight: 24,
+        }}>
+        {message}
+      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#f1f5f9',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 16,
-    color: '#94a3b8',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-});

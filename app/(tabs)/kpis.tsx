@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { KPI, Subtask, SubtaskFrequency, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 
 import React, { useState } from 'react';
@@ -36,28 +37,30 @@ interface SubtaskRowProps {
 }
 
 function SubtaskRow({ subtask, onEdit, onDelete }: SubtaskRowProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={stStyles.row}>
+    <View style={[stStyles.row, { borderBottomColor: theme.cardBorder }]}>
       <View style={stStyles.info}>
-        <Text style={stStyles.name}>{subtask.name}</Text>
-        <Text style={stStyles.meta}>
+        <Text style={[stStyles.name, { color: theme.textPrimary }]}>{subtask.name}</Text>
+        <Text style={[stStyles.meta, { color: theme.textMuted }]}>
           {subtask.frequency} · {subtask.targetCount}×
         </Text>
       </View>
       <View style={stStyles.actions}>
         <TouchableOpacity
-          style={stStyles.editBtn}
+          style={[stStyles.editBtn, { borderColor: theme.primary, backgroundColor: theme.buttonSecondary }]}
           onPress={() => onEdit(subtask)}
           activeOpacity={0.7}
         >
-          <Text style={stStyles.editBtnText}>Edit</Text>
+          <Text style={[stStyles.editBtnText, { color: theme.primary }]}>Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={stStyles.deleteBtn}
+          style={[stStyles.deleteBtn, { borderColor: theme.danger, backgroundColor: theme.buttonSecondary }]}
           onPress={() => onDelete(subtask.id)}
           activeOpacity={0.7}
         >
-          <Text style={stStyles.deleteBtnText}>Del</Text>
+          <Text style={[stStyles.deleteBtnText, { color: theme.danger }]}>Del</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -75,6 +78,7 @@ interface SubtaskFormProps {
 
 function SubtaskForm({ kpiId, editingSubtask, onDone }: SubtaskFormProps) {
   const { addSubtask, updateSubtask } = useAppData();
+  const { theme } = useTheme();
 
   const [name, setName] = useState(editingSubtask?.name ?? '');
   const [frequency, setFrequency] = useState<SubtaskFrequency>(
@@ -108,23 +112,23 @@ function SubtaskForm({ kpiId, editingSubtask, onDone }: SubtaskFormProps) {
     FREQUENCY_OPTIONS.find((o) => o.value === frequency)?.label ?? 'Daily';
 
   return (
-    <View style={stStyles.form}>
+    <View style={[stStyles.form, { backgroundColor: theme.inputBackground, borderColor: theme.cardBorder }]}>
       <TextInput
-        style={stStyles.input}
+        style={[stStyles.input, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, color: theme.textPrimary }]}
         value={name}
         onChangeText={setName}
         placeholder="Subtask name"
-        placeholderTextColor="#64748b"
+        placeholderTextColor={theme.textMuted}
         autoFocus
       />
 
       {/* Frequency inline picker */}
       <TouchableOpacity
-        style={stStyles.freqButton}
+        style={[stStyles.freqButton, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}
         onPress={() => setFreqPickerOpen(true)}
         activeOpacity={0.7}
       >
-        <Text style={stStyles.freqButtonText}>Frequency: {selectedFreqLabel}</Text>
+        <Text style={[stStyles.freqButtonText, { color: theme.textSecondary }]}>Frequency: {selectedFreqLabel}</Text>
       </TouchableOpacity>
 
       <Modal
@@ -139,21 +143,22 @@ function SubtaskForm({ kpiId, editingSubtask, onDone }: SubtaskFormProps) {
             activeOpacity={1}
             onPress={() => setFreqPickerOpen(false)}
           />
-          <View style={stStyles.modalCard}>
-            <Text style={stStyles.modalTitle}>Select frequency</Text>
+          <View style={[stStyles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[stStyles.modalTitle, { color: theme.textPrimary }]}>Select frequency</Text>
             {FREQUENCY_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.value}
                 style={[
                   stStyles.modalRow,
-                  frequency === opt.value && stStyles.modalRowSelected,
+                  { borderBottomColor: theme.cardBorder },
+                  frequency === opt.value && [stStyles.modalRowSelected, { backgroundColor: theme.buttonSecondary }],
                 ]}
                 onPress={() => {
                   setFrequency(opt.value);
                   setFreqPickerOpen(false);
                 }}
               >
-                <Text style={stStyles.modalRowText}>{opt.label}</Text>
+                <Text style={[stStyles.modalRowText, { color: theme.textPrimary }]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -161,24 +166,24 @@ function SubtaskForm({ kpiId, editingSubtask, onDone }: SubtaskFormProps) {
       </Modal>
 
       <View style={stStyles.countRow}>
-        <Text style={stStyles.countLabel}>Target count</Text>
+        <Text style={[stStyles.countLabel, { color: theme.textSecondary }]}>Target count</Text>
         <TextInput
-          style={stStyles.countInput}
+          style={[stStyles.countInput, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, color: theme.textPrimary }]}
           value={targetCount}
           onChangeText={setTargetCount}
           keyboardType="numeric"
-          placeholderTextColor="#64748b"
+          placeholderTextColor={theme.textMuted}
         />
       </View>
 
       <View style={stStyles.formActions}>
-        <TouchableOpacity style={stStyles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
+        <TouchableOpacity style={[stStyles.saveBtn, { backgroundColor: theme.buttonPrimary }]} onPress={handleSave} activeOpacity={0.8}>
           <Text style={stStyles.saveBtnText}>
             {editingSubtask ? 'Save' : 'Add'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={stStyles.cancelBtn} onPress={onDone} activeOpacity={0.7}>
-          <Text style={stStyles.cancelBtnText}>Cancel</Text>
+        <TouchableOpacity style={[stStyles.cancelBtn, { backgroundColor: theme.buttonSecondary, borderColor: theme.cardBorder }]} onPress={onDone} activeOpacity={0.7}>
+          <Text style={[stStyles.cancelBtnText, { color: theme.textSecondary }]}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -193,6 +198,7 @@ interface SubtasksSectionProps {
 
 function SubtasksSection({ kpiId }: SubtasksSectionProps) {
   const { subtasks, deleteSubtask } = useAppData();
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
@@ -217,7 +223,7 @@ function SubtasksSection({ kpiId }: SubtasksSectionProps) {
   };
 
   return (
-    <View style={stStyles.section}>
+    <View style={[stStyles.section, { borderTopColor: theme.cardBorder }]}>
       {/* Section header — always visible */}
       <TouchableOpacity
         style={stStyles.sectionHeader}
@@ -227,7 +233,7 @@ function SubtasksSection({ kpiId }: SubtasksSectionProps) {
         }}
         activeOpacity={0.7}
       >
-        <Text style={stStyles.sectionTitle}>
+        <Text style={[stStyles.sectionTitle, { color: theme.primary }]}>
           Subtasks{kpiSubtasks.length > 0 ? ` (${kpiSubtasks.length})` : ''}
         </Text>
         <Text style={stStyles.chevron}>{expanded ? '▲' : '▼'}</Text>
@@ -280,6 +286,7 @@ export default function KPIManagerScreen() {
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { categories, kpis, addKPI, updateKPI, deleteKPI } = useAppData();
+  const { theme } = useTheme();
 
   const clearForm = () => {
     setKpiName('');
@@ -354,28 +361,28 @@ export default function KPIManagerScreen() {
             <View style={styles.formPanel}>
               <SectionCard>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.label}>KPI Name</Text>
+                  <Text style={[styles.label, { color: theme.textPrimary }]}>KPI Name</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                     value={kpiName}
                     onChangeText={setKpiName}
                     placeholder="Enter KPI name"
-                    placeholderTextColor="#888"
+                    placeholderTextColor={theme.textMuted}
                   />
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Category</Text>
+                  <Text style={[styles.label, { color: theme.textPrimary }]}>Category</Text>
                   <TouchableOpacity
-                    style={styles.picker}
+                    style={[styles.picker, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, backgroundColor: theme.inputBackground }]}
                     onPress={() => setCategoryPickerOpen(!categoryPickerOpen)}
                   >
-                    <Text style={styles.pickerText}>
+                    <Text style={[styles.pickerText, { color: category ? theme.textPrimary : theme.textMuted }]}>
                       {category || 'Select category'}
                     </Text>
                   </TouchableOpacity>
                   {categoryPickerOpen && (
-                    <View style={styles.pickerDropdown}>
+                    <View style={[styles.pickerDropdown, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, backgroundColor: theme.cardBackground }]}>
                       <ScrollView style={{ maxHeight: 150 }}>
                         {categories.map((cat) => (
                           <TouchableOpacity
@@ -386,7 +393,7 @@ export default function KPIManagerScreen() {
                               setCategoryPickerOpen(false);
                             }}
                           >
-                            <Text style={styles.modalRowText}>{cat.name}</Text>
+                            <Text style={[styles.modalRowText, { color: theme.textPrimary }]}>{cat.name}</Text>
                           </TouchableOpacity>
                         ))}
                       </ScrollView>
@@ -396,53 +403,53 @@ export default function KPIManagerScreen() {
 
                 <View style={styles.row}>
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Target</Text>
+                    <Text style={[styles.label, { color: theme.textPrimary }]}>Target</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                       value={target}
                       onChangeText={setTarget}
                       keyboardType="numeric"
                       placeholder="Enter target"
-                      placeholderTextColor="#888"
+                      placeholderTextColor={theme.textMuted}
                     />
                   </View>
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Unit</Text>
+                    <Text style={[styles.label, { color: theme.textPrimary }]}>Unit</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                       value={unit}
                       onChangeText={setUnit}
                       placeholder="Enter unit"
-                      placeholderTextColor="#888"
+                      placeholderTextColor={theme.textMuted}
                     />
                   </View>
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Weight</Text>
+                  <Text style={[styles.label, { color: theme.textPrimary }]}>Weight</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                     value={weight}
                     onChangeText={setWeight}
                     keyboardType="numeric"
                     placeholder="Enter weight"
-                    placeholderTextColor="#888"
+                    placeholderTextColor={theme.textMuted}
                   />
                 </View>
 
-                <TouchableOpacity style={styles.button} onPress={handleSaveOrAddKPI}>
+                <TouchableOpacity style={[styles.button, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleSaveOrAddKPI}>
                   <Text style={styles.buttonText}>{editingId ? 'Save KPI' : 'Add KPI'}</Text>
                 </TouchableOpacity>
                 {editingId ? (
-                  <TouchableOpacity style={styles.cancelButton} onPress={clearForm}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.cancelButton, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, backgroundColor: theme.buttonSecondary }]} onPress={clearForm}>
+                    <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
                 ) : null}
               </SectionCard>
             </View>
 
             <View style={styles.listPanel}>
-              <Text style={styles.title}>Your KPIs</Text>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>Your KPIs</Text>
               {kpis.length === 0 ? (
                 <EmptyState
                   title="No KPIs Yet"
@@ -452,23 +459,23 @@ export default function KPIManagerScreen() {
                 kpis.map((kpi) => (
                   <SectionCard key={kpi.id}>
                     <View style={styles.kpiHeader}>
-                      <Text style={styles.kpiName}>{kpi.name}</Text>
+                      <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
                       <View style={styles.kpiActions}>
                         <TouchableOpacity
-                          style={styles.editButton}
+                          style={[styles.editButton, { borderColor: theme.primary, backgroundColor: theme.buttonSecondary }]}
                           onPress={() => handleStartEdit(kpi)}
                         >
-                          <Text style={styles.editButtonText}>Edit</Text>
+                          <Text style={[styles.editButtonText, { color: theme.primary }]}>Edit</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={styles.deleteButton}
+                          style={[styles.deleteButton, { borderColor: theme.danger, backgroundColor: theme.buttonSecondary }]}
                           onPress={() => handleDeleteKPI(kpi.id)}
                         >
-                          <Text style={styles.deleteButtonText}>Delete</Text>
+                          <Text style={[styles.deleteButtonText, { color: theme.danger }]}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
-                    <Text style={styles.kpiDetails}>
+                    <Text style={[styles.kpiDetails, { color: theme.textSecondary }]}>
                       Category: {kpi.category} | Target: {kpi.target} {kpi.unit} | Weight: {kpi.weight}
                     </Text>
                     {/* ─── Subtasks section ─── */}
@@ -486,7 +493,7 @@ export default function KPIManagerScreen() {
   // ─── Mobile layout ────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
@@ -496,28 +503,28 @@ export default function KPIManagerScreen() {
           <PageHeader title="KPIs" subtitle="Manage your performance metrics." />
           <SectionCard>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>KPI Name</Text>
+              <Text style={[styles.label, { color: theme.textPrimary }]}>KPI Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                 value={kpiName}
                 onChangeText={setKpiName}
                 placeholder="Enter KPI name"
-                placeholderTextColor="#888"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Category</Text>
+              <Text style={[styles.label, { color: theme.textPrimary }]}>Category</Text>
               {categories.length === 0 ? (
-                <Text style={styles.emptyCategoriesText}>Please add categories first</Text>
+                <Text style={[styles.emptyCategoriesText, { color: theme.textMuted }]}>Please add categories first</Text>
               ) : (
                 <>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, backgroundColor: theme.inputBackground }]}
                     onPress={() => setCategoryPickerOpen(true)}
                     activeOpacity={0.7}
                   >
-                    <Text style={category ? styles.pickerValueText : styles.pickerPlaceholderText}>
+                    <Text style={category ? [styles.pickerValueText, { color: theme.textPrimary }] : [styles.pickerPlaceholderText, { color: theme.textMuted }]}>
                       {category || 'Select a category'}
                     </Text>
                   </TouchableOpacity>
@@ -533,19 +540,19 @@ export default function KPIManagerScreen() {
                         activeOpacity={1}
                         onPress={() => setCategoryPickerOpen(false)}
                       />
-                      <View style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>Select a category</Text>
+                      <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md }]}>
+                        <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Select a category</Text>
                         <ScrollView style={styles.modalList}>
                           {categories.map((cat) => (
                             <TouchableOpacity
                               key={cat.id}
-                              style={styles.modalRow}
+                              style={[styles.modalRow, { borderBottomColor: theme.cardBorder }]}
                               onPress={() => {
                                 setCategory(cat.name);
                                 setCategoryPickerOpen(false);
                               }}
                             >
-                              <Text style={styles.modalRowText}>{cat.name}</Text>
+                              <Text style={[styles.modalRowText, { color: theme.textPrimary }]}>{cat.name}</Text>
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
@@ -558,46 +565,46 @@ export default function KPIManagerScreen() {
 
             <View style={styles.row}>
               <View style={[styles.inputContainer, { flex: 1 }]}>
-                <Text style={styles.label}>Target</Text>
+                <Text style={[styles.label, { color: theme.textPrimary }]}>Target</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                   value={target}
                   onChangeText={setTarget}
                   keyboardType="numeric"
                   placeholder="Enter target"
-                  placeholderTextColor="#888"
+                  placeholderTextColor={theme.textMuted}
                 />
               </View>
               <View style={[styles.inputContainer, { flex: 1 }]}>
-                <Text style={styles.label}>Unit</Text>
+                <Text style={[styles.label, { color: theme.textPrimary }]}>Unit</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                   value={unit}
                   onChangeText={setUnit}
                   placeholder="Enter unit"
-                  placeholderTextColor="#888"
+                  placeholderTextColor={theme.textMuted}
                 />
               </View>
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Weight</Text>
+              <Text style={[styles.label, { color: theme.textPrimary }]}>Weight</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, color: theme.textPrimary, backgroundColor: theme.inputBackground }]}
                 value={weight}
                 onChangeText={setWeight}
                 keyboardType="numeric"
                 placeholder="Enter weight"
-                placeholderTextColor="#888"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={handleSaveOrAddKPI}>
+            <TouchableOpacity style={[styles.button, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]} onPress={handleSaveOrAddKPI}>
               <Text style={styles.buttonText}>{editingId ? 'Save KPI' : 'Add KPI'}</Text>
             </TouchableOpacity>
             {editingId ? (
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit} activeOpacity={0.7}>
-                <Text style={styles.cancelButtonText}>Cancel Edit</Text>
+              <TouchableOpacity style={[styles.cancelButton, { borderColor: theme.cardBorder, borderRadius: theme.borderRadius.md, backgroundColor: theme.buttonSecondary }]} onPress={handleCancelEdit} activeOpacity={0.7}>
+                <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel Edit</Text>
               </TouchableOpacity>
             ) : null}
           </SectionCard>
@@ -610,26 +617,26 @@ export default function KPIManagerScreen() {
           ) : (
             kpis.map((item) => (
               <SectionCard key={item.id}>
-                <Text style={styles.kpiText}>Name: {item.name}</Text>
-                <Text style={styles.kpiText}>Category: {item.category}</Text>
-                <Text style={styles.kpiText}>
+                <Text style={[styles.kpiText, { color: theme.textPrimary }]}>Name: {item.name}</Text>
+                <Text style={[styles.kpiText, { color: theme.textPrimary }]}>Category: {item.category}</Text>
+                <Text style={[styles.kpiText, { color: theme.textPrimary }]}>
                   Target: {item.target} {item.unit}
                 </Text>
-                <Text style={styles.kpiText}>Weight: {item.weight}</Text>
+                <Text style={[styles.kpiText, { color: theme.textPrimary }]}>Weight: {item.weight}</Text>
                 <View style={styles.buttonRow}>
                   <TouchableOpacity
-                    style={styles.editButton}
+                    style={[styles.editButton, { borderColor: theme.primary, backgroundColor: theme.buttonSecondary }]}
                     onPress={() => handleStartEdit(item)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.editButtonText}>Edit</Text>
+                    <Text style={[styles.editButtonText, { color: theme.primary }]}>Edit</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.deleteButton}
+                    style={[styles.deleteButton, { borderColor: theme.danger, backgroundColor: theme.buttonSecondary }]}
                     onPress={() => handleDeleteKPI(item.id)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.deleteButtonText}>Delete</Text>
+                    <Text style={[styles.deleteButtonText, { color: theme.danger }]}>Delete</Text>
                   </TouchableOpacity>
                 </View>
                 {/* ─── Subtasks section ─── */}

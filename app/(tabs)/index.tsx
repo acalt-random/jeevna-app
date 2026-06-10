@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { ResponsiveGrid } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
 import { KPI, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
@@ -290,6 +291,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const deviceType = useDeviceType();
+  const { theme } = useTheme();
 
   // landscape = tall enough content area but width > height on mobile/tablet
   const isLandscape = width > height;
@@ -337,35 +339,92 @@ export default function HomeScreen() {
 
   // ── Testing panel (shared) ──
   const testingPanel = (
-    <SectionCard style={styles.testingCard}>
-      <Text style={styles.testingLabel}>Testing</Text>
+    <SectionCard
+      style={[
+        styles.testingCard,
+        {
+          borderColor: theme.cardBorder,
+          backgroundColor: theme.secondaryBackground,
+          borderRadius: theme.borderRadius.md,
+        },
+      ]}>
+      <Text style={[styles.testingLabel, { color: theme.textMuted }]}>Testing</Text>
       <View style={styles.testingRow}>
-        <TouchableOpacity style={styles.testingBtnLoad} onPress={loadSampleData} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[
+            styles.testingBtnLoad,
+            { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.sm },
+          ]}
+          onPress={loadSampleData}
+          activeOpacity={0.8}>
           <Text style={styles.testingBtnLoadText}>Load Sample Data</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.testingBtnClear} onPress={clearAllData} activeOpacity={0.8}>
-          <Text style={styles.testingBtnClearText}>Clear All Data</Text>
+        <TouchableOpacity
+          style={[
+            styles.testingBtnClear,
+            { borderColor: theme.danger, borderRadius: theme.borderRadius.sm },
+          ]}
+          onPress={clearAllData}
+          activeOpacity={0.8}>
+          <Text style={[styles.testingBtnClearText, { color: theme.danger }]}>Clear All Data</Text>
         </TouchableOpacity>
       </View>
     </SectionCard>
   );
 
   const lifeBuddyPanel = (
-    <SectionCard style={styles.lifeBuddyCard}>
+    <SectionCard
+      style={[
+        styles.lifeBuddyCard,
+        {
+          borderColor: theme.primary,
+          backgroundColor: theme.secondaryBackground,
+          borderRadius: theme.borderRadius.md,
+        },
+      ]}>
       <View style={styles.lifeBuddyRow}>
         <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text style={styles.lifeBuddyLabel}>Life Buddy</Text>
-          <Text style={styles.lifeBuddyTitle}>Get today&apos;s guided next steps</Text>
-          <Text style={styles.lifeBuddyHint}>
+          <Text style={[styles.lifeBuddyLabel, { color: theme.primary }]}>Life Buddy</Text>
+          <Text style={[styles.lifeBuddyTitle, { color: theme.textPrimary }]}>Get today&apos;s guided next steps</Text>
+          <Text style={[styles.lifeBuddyHint, { color: theme.textSecondary }]}>
             Review priorities, weak areas, relationship follow-ups, and missing KPI entries.
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.lifeBuddyButton}
+          style={[
+            styles.lifeBuddyButton,
+            { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.sm },
+          ]}
           onPress={() => router.push('/life-buddy')}
           activeOpacity={0.8}
         >
           <Text style={styles.lifeBuddyButtonText}>Open Life Buddy</Text>
+        </TouchableOpacity>
+      </View>
+    </SectionCard>
+  );
+
+  const preferencesPanel = (
+    <SectionCard
+      style={{
+        backgroundColor: theme.secondaryBackground,
+        borderColor: theme.cardBorder,
+      }}>
+      <View style={styles.preferencesRow}>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          <Text style={[styles.preferencesLabel, { color: theme.textPrimary }]}>Preferences</Text>
+          <Text style={[styles.preferencesHint, { color: theme.textSecondary }]}>
+            Appearance, notifications, data and app settings
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.preferencesButton,
+            { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.sm },
+          ]}
+          onPress={() => router.push('/preferences')}
+          activeOpacity={0.85}>
+          <Text style={[styles.preferencesButtonText, { color: theme.textPrimary }]}>Open Preferences</Text>
         </TouchableOpacity>
       </View>
     </SectionCard>
@@ -431,10 +490,11 @@ export default function HomeScreen() {
     return (
       <DesktopShell title="Life Status">
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 24 }}>
-          <Text style={styles.screenTitle}>Life status</Text>
-          <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
+          <Text style={[styles.screenTitle, { color: theme.textPrimary }]}>Life status</Text>
+          <Text style={[styles.screenSubtitle, { color: theme.textSecondary }]}>Your personal performance dashboard</Text>
 
           {lifeBuddyPanel}
+          {preferencesPanel}
           {testingPanel}
 
           <View style={styles.desktopTopRow}>
@@ -465,17 +525,18 @@ export default function HomeScreen() {
   // MOBILE / TABLET — portrait & landscape
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0f1e' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
       >
         <PageContainer>
-          <Text style={styles.screenTitle}>Life status</Text>
-          <Text style={styles.screenSubtitle}>Your personal performance dashboard</Text>
+          <Text style={[styles.screenTitle, { color: theme.textPrimary }]}>Life status</Text>
+          <Text style={[styles.screenSubtitle, { color: theme.textSecondary }]}>Your personal performance dashboard</Text>
 
           {lifeBuddyPanel}
+          {preferencesPanel}
           {testingPanel}
 
           {isLandscape ? (
@@ -578,6 +639,29 @@ const styles = StyleSheet.create({
   },
   lifeBuddyButtonText: {
     color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  preferencesLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  preferencesHint: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  preferencesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  preferencesButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  preferencesButtonText: {
     fontSize: 14,
     fontWeight: '700',
   },

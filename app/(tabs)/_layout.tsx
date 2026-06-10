@@ -3,12 +3,11 @@ import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { theme } = useTheme();
   const deviceType = useDeviceType();
 
   const isDesktop = deviceType === 'desktop';
@@ -16,10 +15,15 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: theme.primary,
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarStyle: isDesktop ? { display: 'none' } : undefined,
+        tabBarStyle: isDesktop
+          ? { display: 'none' }
+          : {
+              backgroundColor: theme.secondaryBackground,
+              borderTopColor: theme.cardBorder,
+            },
       }}>
       <Tabs.Screen
         name="index"

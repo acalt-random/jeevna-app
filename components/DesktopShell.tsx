@@ -1,6 +1,7 @@
+import { useTheme } from '@/context/ThemeContext';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 interface DesktopShellProps {
   children: React.ReactNode;
@@ -9,45 +10,102 @@ interface DesktopShellProps {
 
 export function DesktopShell({ children, title }: DesktopShellProps) {
   const router = useRouter();
+  const { theme } = useTheme();
 
   const navigateTo = (route: string) => {
     router.push(route as any);
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.sidebar}>
-        <Text style={styles.sidebarTitle}>Life KPI</Text>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)')}>
-          <Text style={styles.navText}>Home</Text>
+    <View
+      style={{
+        flex: 1,
+        flexDirection: 'row',
+        backgroundColor: theme.background,
+      }}>
+      <View
+        style={{
+          width: 260,
+          backgroundColor: theme.secondaryBackground,
+          padding: theme.spacing.lg,
+          paddingTop: theme.spacing.xxl,
+          borderRightWidth: 1,
+          borderRightColor: theme.cardBorder,
+        }}>
+        <Text
+          style={{
+            fontSize: 26,
+            fontWeight: '800',
+            color: theme.textPrimary,
+            marginBottom: theme.spacing.xxl,
+          }}>
+          Life KPI
+        </Text>
+        <TouchableOpacity
+          style={{
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: theme.borderRadius.md,
+            backgroundColor: theme.buttonSecondary,
+          }}
+          onPress={() => navigateTo('/(tabs)')}>
+          <Text style={{ fontSize: 16, color: theme.textPrimary, fontWeight: '600' }}>Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/entry')}>
-          <Text style={styles.navText}>Entry</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/entry')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Entry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/kpis')}>
-          <Text style={styles.navText}>KPIs</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/kpis')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>KPIs</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/categories')}>
-          <Text style={styles.navText}>Categories</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/categories')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Categories</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/history')}>
-          <Text style={styles.navText}>History</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/history')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>History</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/weekly')}>
-          <Text style={styles.navText}>Weekly</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/weekly')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Weekly</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/life-buddy')}>
-          <Text style={styles.navText}>Life Buddy</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/life-buddy')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Life Buddy</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('/(tabs)/templates')}>
-          <Text style={styles.navText}>Templates</Text>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/preferences')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Preferences</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={navItemStyle(theme)}
+          onPress={() => navigateTo('/(tabs)/templates')}>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Templates</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.main}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{title}</Text>
+      <View style={{ flex: 1, flexDirection: 'column' }}>
+        <View
+          style={{
+            height: 68,
+            backgroundColor: theme.secondaryBackground,
+            justifyContent: 'center',
+            paddingHorizontal: theme.spacing.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.cardBorder,
+          }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary }}>{title}</Text>
         </View>
-        <View style={styles.content}>
+        <View style={{ flex: 1, backgroundColor: theme.background, paddingTop: theme.spacing.md }}>
           {children}
         </View>
       </View>
@@ -55,54 +113,11 @@ export function DesktopShell({ children, title }: DesktopShellProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#0f172a',
-  },
-  sidebar: {
-    width: 240,
-    backgroundColor: '#1e293b',
-    padding: 20,
-    paddingTop: 40,
-  },
-  sidebarTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#f8fafc',
-    marginBottom: 40,
-  },
-  navItem: {
+function navItemStyle(theme: ReturnType<typeof useTheme>['theme']) {
+  return {
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 8,
-  },
-  navText: {
-    fontSize: 16,
-    color: '#cbd5e1',
-  },
-  main: {
-    flex: 1,
-    flexDirection: 'column',
-  },
-  header: {
-    height: 60,
-    backgroundColor: '#1e293b',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#f8fafc',
-  },
-  content: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    paddingTop: 20,
-  },
-});
+    borderRadius: theme.borderRadius.md,
+  } as const;
+}

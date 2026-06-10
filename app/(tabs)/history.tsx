@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { DayEntry, useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import React, { useMemo, useState } from 'react';
 import {
@@ -21,6 +22,7 @@ const CHART_INNER_HEIGHT = 120;
 
 export default function HistoryScreen() {
   const { entries, kpis } = useAppData();
+  const { theme } = useTheme();
   const deviceType = useDeviceType();
   const [selectedEntry, setSelectedEntry] = useState<DayEntry | null>(null);
 
@@ -58,15 +60,15 @@ export default function HistoryScreen() {
                   onPress={() => setSelectedEntry(entry)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.date}>{entry.date}</Text>
-                  <Text style={styles.score}>{entry.totalScore} / 100</Text>
-                  <Text style={styles.rowHint}>Tap for details</Text>
+                  <Text style={[styles.date, { color: theme.textPrimary }]}>{entry.date}</Text>
+                  <Text style={[styles.score, { color: theme.primary }]}>{entry.totalScore} / 100</Text>
+                  <Text style={[styles.rowHint, { color: theme.textMuted }]}>Tap for details</Text>
                 </TouchableOpacity>
               </SectionCard>
             ))
           )}
 
-          <Text style={styles.chartTitle}>7-day score trend</Text>
+          <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>7-day score trend</Text>
           {lastSevenChronological.length === 0 ? (
             <EmptyState
               title="No Trend Data"
@@ -80,13 +82,13 @@ export default function HistoryScreen() {
                   const barHeight = (clamped / 100) * CHART_INNER_HEIGHT;
                   return (
                     <View key={entry.id} style={styles.chartColumn}>
-                      <View style={[styles.chartTrack, { height: CHART_INNER_HEIGHT }]}>
-                        <View style={[styles.chartBar, { height: barHeight }]} />
+                      <View style={[styles.chartTrack, { height: CHART_INNER_HEIGHT, backgroundColor: theme.inputBackground }]}>
+                        <View style={[styles.chartBar, { height: barHeight, backgroundColor: theme.buttonPrimary }]} />
                       </View>
-                      <Text style={styles.chartDateLabel} numberOfLines={1}>
+                      <Text style={[styles.chartDateLabel, { color: theme.textMuted }]} numberOfLines={1}>
                         {entry.date.slice(5)}
                       </Text>
-                      <Text style={styles.chartScoreLabel}>{entry.totalScore}</Text>
+                      <Text style={[styles.chartScoreLabel, { color: theme.textPrimary }]}>{entry.totalScore}</Text>
                     </View>
                   );
                 })}
@@ -106,43 +108,43 @@ export default function HistoryScreen() {
                 activeOpacity={1}
                 onPress={() => setSelectedEntry(null)}
               />
-              <View style={styles.modalCard}>
+              <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
                 {selectedEntry ? (
                   <>
-                    <Text style={styles.modalTitle}>{selectedEntry.date}</Text>
-                    <Text style={styles.modalScore}>
+                    <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{selectedEntry.date}</Text>
+                    <Text style={[styles.modalScore, { color: theme.primary }]}>
                       Total score: {selectedEntry.totalScore} / 100
                     </Text>
                     <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
                       {sortedKpis.length === 0 ? (
-                        <Text style={styles.modalMeta}>No KPIs defined.</Text>
+                        <Text style={[styles.modalMeta, { color: theme.textSecondary }]}>No KPIs defined.</Text>
                       ) : (
                         sortedKpis.map((kpi) => {
                           const raw = selectedEntry.actuals[kpi.id];
                           const hasActual = raw !== undefined && raw !== '';
                           return (
-                            <View key={kpi.id} style={styles.detailBlock}>
-                              <Text style={styles.detailName}>{kpi.name}</Text>
-                              <Text style={styles.detailLine}>
+                            <View key={kpi.id} style={[styles.detailBlock, { borderBottomColor: theme.cardBorder }]}>
+                              <Text style={[styles.detailName, { color: theme.textPrimary }]}>{kpi.name}</Text>
+                              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
                                 Actual:{' '}
                                 {hasActual ? `${raw} ${kpi.unit}` : '—'}
                               </Text>
-                              <Text style={styles.detailLine}>
+                              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
                                 Target: {kpi.target} {kpi.unit}
                               </Text>
-                              <Text style={styles.detailLine}>Category: {kpi.category}</Text>
-                              <Text style={styles.detailLine}>Weight: {kpi.weight}</Text>
+                              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>Category: {kpi.category}</Text>
+                              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>Weight: {kpi.weight}</Text>
                             </View>
                           );
                         })
                       )}
                     </ScrollView>
                     <TouchableOpacity
-                      style={styles.closeButton}
+                      style={[styles.closeButton, { backgroundColor: theme.buttonSecondary, borderRadius: theme.borderRadius.md }]}
                       onPress={() => setSelectedEntry(null)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.closeButtonText}>Close</Text>
+                      <Text style={[styles.closeButtonText, { color: theme.textPrimary }]}>Close</Text>
                     </TouchableOpacity>
                   </>
                 ) : null}
@@ -162,7 +164,7 @@ export default function HistoryScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {pageContent}
     </SafeAreaView>
   );

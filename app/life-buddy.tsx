@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
 import { useAppData } from '@/context/AppDataContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import React, { useMemo } from 'react';
 import {
@@ -116,10 +117,12 @@ function kpiContribution(
 }
 
 function PriorityCard({ item }: { item: PriorityItem }) {
+  const { theme } = useTheme();
+
   return (
     <SectionCard style={styles.priorityCard}>
-      <Text style={styles.priorityTitle}>{item.title}</Text>
-      <Text style={styles.priorityDescription}>{item.description}</Text>
+      <Text style={[styles.priorityTitle, { color: theme.textPrimary }]}>{item.title}</Text>
+      <Text style={[styles.priorityDescription, { color: theme.textSecondary }]}>{item.description}</Text>
     </SectionCard>
   );
 }
@@ -136,6 +139,7 @@ export default function LifeBuddyScreen() {
     personActivities,
     personTodos,
   } = useAppData();
+  const { theme } = useTheme();
   const deviceType = useDeviceType();
 
   const today = todayYMD();
@@ -361,23 +365,23 @@ export default function LifeBuddyScreen() {
 
         <ResponsiveGrid>
           <SectionCard>
-            <Text style={styles.statLabel}>Today&apos;s Priorities</Text>
-            <Text style={styles.statValue}>{todaysPriorities.length}</Text>
-            <Text style={styles.statHint}>Top actions surfaced for today</Text>
+            <Text style={[styles.statLabel, { color: theme.textMuted }]}>Today&apos;s Priorities</Text>
+            <Text style={[styles.statValue, { color: theme.textPrimary }]}>{todaysPriorities.length}</Text>
+            <Text style={[styles.statHint, { color: theme.textSecondary }]}>Top actions surfaced for today</Text>
           </SectionCard>
           <SectionCard>
-            <Text style={styles.statLabel}>People Needing Attention</Text>
-            <Text style={styles.statValue}>{peopleNeedingAttention.length}</Text>
-            <Text style={styles.statHint}>Relationship score below 70</Text>
+            <Text style={[styles.statLabel, { color: theme.textMuted }]}>People Needing Attention</Text>
+            <Text style={[styles.statValue, { color: theme.textPrimary }]}>{peopleNeedingAttention.length}</Text>
+            <Text style={[styles.statHint, { color: theme.textSecondary }]}>Relationship score below 70</Text>
           </SectionCard>
           <SectionCard>
-            <Text style={styles.statLabel}>Pending KPI Entries</Text>
-            <Text style={styles.statValue}>{pendingKpiEntries.length}</Text>
-            <Text style={styles.statHint}>KPIs still missing today</Text>
+            <Text style={[styles.statLabel, { color: theme.textMuted }]}>Pending KPI Entries</Text>
+            <Text style={[styles.statValue, { color: theme.textPrimary }]}>{pendingKpiEntries.length}</Text>
+            <Text style={[styles.statHint, { color: theme.textSecondary }]}>KPIs still missing today</Text>
           </SectionCard>
         </ResponsiveGrid>
 
-        <Text style={styles.sectionTitle}>Today&apos;s Priorities</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Today&apos;s Priorities</Text>
         {todaysPriorities.length === 0 ? (
           <EmptyState
             title="Nothing urgent right now"
@@ -391,7 +395,7 @@ export default function LifeBuddyScreen() {
           </ResponsiveGrid>
         )}
 
-        <Text style={styles.sectionTitle}>People Needing Attention</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>People Needing Attention</Text>
         {peopleNeedingAttention.length === 0 ? (
           <EmptyState
             title="Relationships look healthy"
@@ -402,21 +406,21 @@ export default function LifeBuddyScreen() {
             <SectionCard key={person.id}>
               <View style={styles.rowBetween}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.itemTitle}>{person.name}</Text>
-                  <Text style={styles.itemMeta}>{person.groupName}</Text>
-                  <Text style={styles.itemHint}>
+                  <Text style={[styles.itemTitle, { color: theme.textPrimary }]}>{person.name}</Text>
+                  <Text style={[styles.itemMeta, { color: theme.primary }]}>{person.groupName}</Text>
+                  <Text style={[styles.itemHint, { color: theme.textSecondary }]}>
                     {person.daysSinceContact === null
                       ? 'No contact date recorded yet.'
                       : `Last contact was ${person.daysSinceContact} day(s) ago.`}
                   </Text>
                 </View>
-                <Text style={styles.alertScore}>{person.score}</Text>
+                <Text style={[styles.alertScore, { color: theme.danger }]}>{person.score}</Text>
               </View>
             </SectionCard>
           ))
         )}
 
-        <Text style={styles.sectionTitle}>Overdue Relationship To-Dos</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Overdue Relationship To-Dos</Text>
         {overdueRelationshipTodos.length === 0 ? (
           <EmptyState
             title="No overdue relationship to-dos"
@@ -425,14 +429,14 @@ export default function LifeBuddyScreen() {
         ) : (
           overdueRelationshipTodos.map((todo) => (
             <SectionCard key={todo.id}>
-              <Text style={styles.itemTitle}>{todo.title}</Text>
-              <Text style={styles.itemMeta}>{todo.personName}</Text>
-              <Text style={styles.itemHint}>Due date: {todo.dueDate}</Text>
+              <Text style={[styles.itemTitle, { color: theme.textPrimary }]}>{todo.title}</Text>
+              <Text style={[styles.itemMeta, { color: theme.primary }]}>{todo.personName}</Text>
+              <Text style={[styles.itemHint, { color: theme.textSecondary }]}>Due date: {todo.dueDate}</Text>
             </SectionCard>
           ))
         )}
 
-        <Text style={styles.sectionTitle}>Weakest Category</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Weakest Category</Text>
         {!weakestCategory ? (
           <EmptyState
             title="No category insight yet"
@@ -440,15 +444,15 @@ export default function LifeBuddyScreen() {
           />
         ) : (
           <SectionCard>
-            <Text style={styles.itemTitle}>{weakestCategory.name}</Text>
-            <Text style={styles.bigScore}>{weakestCategory.score} / 100</Text>
-            <Text style={styles.itemHint}>
+            <Text style={[styles.itemTitle, { color: theme.textPrimary }]}>{weakestCategory.name}</Text>
+            <Text style={[styles.bigScore, { color: theme.warning }]}>{weakestCategory.score} / 100</Text>
+            <Text style={[styles.itemHint, { color: theme.textSecondary }]}>
               Based on your latest available KPI values across {weakestCategory.kpiCount} KPI(s).
             </Text>
           </SectionCard>
         )}
 
-        <Text style={styles.sectionTitle}>Pending KPI Entries</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Pending KPI Entries</Text>
         {pendingKpiEntries.length === 0 ? (
           <EmptyState
             title="All KPI entries are logged"
@@ -457,14 +461,14 @@ export default function LifeBuddyScreen() {
         ) : (
           pendingKpiEntries.map((kpi) => (
             <SectionCard key={kpi.id}>
-              <Text style={styles.itemTitle}>{kpi.name}</Text>
-              <Text style={styles.itemMeta}>{kpi.category}</Text>
-              <Text style={styles.itemHint}>Expected unit: {kpi.unit}</Text>
+              <Text style={[styles.itemTitle, { color: theme.textPrimary }]}>{kpi.name}</Text>
+              <Text style={[styles.itemMeta, { color: theme.primary }]}>{kpi.category}</Text>
+              <Text style={[styles.itemHint, { color: theme.textSecondary }]}>Expected unit: {kpi.unit}</Text>
             </SectionCard>
           ))
         )}
 
-        <Text style={styles.sectionTitle}>Suggested Actions</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Suggested Actions</Text>
         {suggestedActions.length === 0 ? (
           <EmptyState
             title="No suggestions to show"
@@ -473,7 +477,7 @@ export default function LifeBuddyScreen() {
         ) : (
           suggestedActions.map((suggestion, index) => (
             <SectionCard key={`${index}-${suggestion}`}>
-              <Text style={styles.suggestionText}>{suggestion}</Text>
+              <Text style={[styles.suggestionText, { color: theme.textSecondary }]}>{suggestion}</Text>
             </SectionCard>
           ))
         )}
@@ -485,7 +489,7 @@ export default function LifeBuddyScreen() {
     return <DesktopShell title="Life Buddy">{pageContent}</DesktopShell>;
   }
 
-  return <SafeAreaView style={styles.screen}>{pageContent}</SafeAreaView>;
+  return <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>{pageContent}</SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
