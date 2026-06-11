@@ -2,261 +2,482 @@ import { DesktopShell } from '@/components/DesktopShell';
 import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
+import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
-import { Category, useAppData } from '@/context/AppDataContext';
+import { useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
-import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import {
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function CategoryManagerScreen() {
+  const { categories, kpis, entries, latestActuals, addCategory, updateCategory, deleteCategory } =
+    useAppData();
+  const { theme } = useTheme();
+  const deviceType = useDeviceType();
+  const router = useRouter();
+
   const [categoryName, setCategoryName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteBlockedMessage, setDeleteBlockedMessage] = useState('');
-  const { categories, addCategory, updateCategory, deleteCategory } = useAppData();
-  const { theme } = useTheme();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  const latestEntryActuals = useMemo(() => {
+    if (entries.length === 0) return latestActuals;
+    const latestEntry = [...entries].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+    return latestEntry?.actuals ?? latestActuals;
+  }, [entries, latestActuals]);
+
+  const categoryCards = useMemo(() => {
+    return categories.map((category) => {
+      const categoryKpis = kpis.filter((kpi) => kpi.category === category.name);
+      const totalWeight = categoryKpis.reduce((sum, kpi) => sum + kpi.weight, 0);
+      const scoredWeight = categoryKpis.reduce((sum, kpi) => {
+        const rawActual = latestEntryActuals[kpi.id];
+        const parsedActual = parseFloat(rawActual || '0');
+        const safeActual = Number.isNaN(parsedActual) ? 0 : parsedActual;
+        const contribution =
+          kpi.target > 0 ? Math.min(kpi.weight, (safeActual / kpi.target) * kpi.weight) : 0;
+        return sum + contribution;
+      }, 0);
+
+      const score = totalWeight > 0 ? Math.round((scoredWeight / totalWeight) * 100) : null;
+      const topKpis = categoryKpis.slice(0, 3).map((kpi) => {
+        const latestActual = latestEntryActuals[kpi.id];
+        const parsedActual = parseFloat(latestActual || '0');
+        const progress =
+          latestActual !== undefined && latestActual !== '' && !Number.isNaN(parsedActual) && kpi.target > 0
+            ? Math.min(100, Math.round((parsedActual / kpi.target) * 100))
+            : null;
+
+        return {
+          ...kpi,
+          latestActual: latestActual ?? null,
+          progress,
+        };
+      });
+
+      return {
+        ...category,
+        score,
+        kpiCount: categoryKpis.length,
+        topKpis,
+      };
+    });
+  }, [categories, kpis, latestEntryActuals]);
 
   const clearForm = () => {
     setCategoryName('');
     setEditingId(null);
+    setIsFormOpen(false);
   };
 
-  const handleStartEdit = (item: Category) => {
+  const openAddModal = () => {
     setDeleteBlockedMessage('');
-    setCategoryName(item.name);
-    setEditingId(item.id);
+    setCategoryName('');
+    setEditingId(null);
+    setIsFormOpen(true);
   };
 
-  const handleCancelEdit = () => {
-    clearForm();
+  const handleStartEdit = (category: { id: string; name: string }) => {
+    setDeleteBlockedMessage('');
+    setCategoryName(category.name);
+    setEditingId(category.id);
+    setIsFormOpen(true);
   };
 
   const handleSaveOrAddCategory = () => {
-    if (!categoryName.trim()) {
-      return;
-    }
+    if (!categoryName.trim()) return;
+
     if (editingId) {
       updateCategory(editingId, categoryName);
     } else {
       addCategory(categoryName);
     }
+
     clearForm();
   };
 
   const handleDeleteCategory = (id: string) => {
     setDeleteBlockedMessage('');
-    if (editingId === id) {
-      clearForm();
-    }
     const deleted = deleteCategory(id);
     if (!deleted) {
       setDeleteBlockedMessage('Cannot delete category because KPIs are linked to it');
+      return;
+    }
+
+    if (editingId === id) {
+      clearForm();
     }
   };
 
-  const deviceType = useDeviceType();
-
   const pageContent = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
       <PageContainer>
         <PageHeader
           title="Categories"
-          subtitle="Create and manage categories for your KPIs."
-        />
-        <SectionCard>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                borderColor: theme.cardBorder,
-                borderRadius: theme.borderRadius.md,
-                color: theme.textPrimary,
-                backgroundColor: theme.inputBackground,
-              },
-            ]}
-            value={categoryName}
-            onChangeText={setCategoryName}
-            placeholder="Enter category name"
-            placeholderTextColor={theme.textMuted}
-          />
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.buttonPrimary, borderRadius: theme.borderRadius.md }]}
-            onPress={handleSaveOrAddCategory}
-          >
-            <Text style={styles.buttonText}>{editingId ? 'Save Category' : 'Add Category'}</Text>
-          </TouchableOpacity>
-          {editingId ? (
+          subtitle="Manage life areas."
+          rightAccessory={
             <TouchableOpacity
               style={[
-                styles.cancelButton,
+                styles.addButton,
                 {
-                  borderColor: theme.cardBorder,
+                  backgroundColor: theme.buttonPrimary,
                   borderRadius: theme.borderRadius.md,
-                  backgroundColor: theme.buttonSecondary,
                 },
               ]}
-              onPress={handleCancelEdit}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel Edit</Text>
+              onPress={openAddModal}
+              activeOpacity={0.8}>
+              <Text style={styles.addButtonText}>+ Add Category</Text>
             </TouchableOpacity>
-          ) : null}
-        </SectionCard>
+          }
+        />
+
         {deleteBlockedMessage ? (
           <Text style={[styles.blockedMessage, { color: theme.danger }]}>{deleteBlockedMessage}</Text>
         ) : null}
+
         {categories.length === 0 ? (
           <EmptyState
             title="No Categories Yet"
             message="Create your first category to organize your KPIs."
           />
         ) : (
-          categories.map((item) => (
-            <SectionCard key={item.id}>
-              <Text style={[styles.categoryText, { color: theme.textPrimary }]}>{item.name}</Text>
-              <View style={styles.buttonRow}>
+          <ResponsiveGrid gap={14}>
+            {categoryCards.map((category) => (
+              <ResponsiveGridItem
+                key={category.id}
+                mobileSpan={1}
+                tabletSpan={3}
+                desktopSpan={4}>
+                <SectionCard>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/category/[categoryName]',
+                        params: { categoryName: category.name },
+                      })
+                    }>
+                    <View style={styles.categoryHeader}>
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={[styles.categoryName, { color: theme.textPrimary }]}>
+                          {category.name}
+                        </Text>
+                        <Text style={[styles.categoryMeta, { color: theme.textSecondary }]}>
+                          {category.kpiCount} KPI{category.kpiCount === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.categoryScore, { color: theme.primary }]}>
+                        {category.score !== null ? `${category.score}/100` : '—'}
+                      </Text>
+                    </View>
+
+                    {category.topKpis.length === 0 ? (
+                      <Text style={[styles.emptyCategoryText, { color: theme.textSecondary }]}>
+                        No KPIs yet. Add one to start tracking this area.
+                      </Text>
+                    ) : (
+                      <View style={styles.kpiPreviewList}>
+                        {category.topKpis.map((kpi) => (
+                          <View
+                            key={kpi.id}
+                            style={[styles.kpiPreviewRow, { borderBottomColor: theme.cardBorder }]}>
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                              <Text style={[styles.kpiPreviewName, { color: theme.textPrimary }]}>
+                                {kpi.name}
+                              </Text>
+                              <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
+                                Target: {kpi.target} {kpi.unit}
+                              </Text>
+                              <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
+                                Latest actual:{' '}
+                                {kpi.latestActual ? `${kpi.latestActual} ${kpi.unit}` : 'No entries yet'}
+                              </Text>
+                            </View>
+                            <Text style={[styles.kpiPreviewScore, { color: theme.primary }]}>
+                              {kpi.progress !== null ? `${kpi.progress}%` : '—'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.secondaryButton,
+                        {
+                          backgroundColor: theme.buttonSecondary,
+                          borderColor: theme.cardBorder,
+                          borderRadius: theme.borderRadius.sm,
+                        },
+                      ]}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/category/[categoryName]',
+                          params: { categoryName: category.name },
+                        })
+                      }
+                      activeOpacity={0.8}>
+                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                        View all KPIs
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.secondaryButton,
+                        {
+                          backgroundColor: theme.buttonSecondary,
+                          borderColor: theme.cardBorder,
+                          borderRadius: theme.borderRadius.sm,
+                        },
+                      ]}
+                      onPress={() => handleStartEdit(category)}
+                      activeOpacity={0.8}>
+                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                        Edit
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.secondaryButton,
+                        {
+                          backgroundColor: theme.buttonSecondary,
+                          borderColor: theme.danger,
+                          borderRadius: theme.borderRadius.sm,
+                        },
+                      ]}
+                      onPress={() => handleDeleteCategory(category.id)}
+                      activeOpacity={0.8}>
+                      <Text style={[styles.secondaryButtonText, { color: theme.danger }]}>
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </SectionCard>
+              </ResponsiveGridItem>
+            ))}
+          </ResponsiveGrid>
+        )}
+
+        <Modal
+          visible={isFormOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={clearForm}>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={clearForm}
+            />
+            <View
+              style={[
+                styles.formModalCard,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                  borderRadius: theme.borderRadius.lg,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
+                {editingId ? 'Edit Category' : 'Add Category'}
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    borderColor: theme.cardBorder,
+                    borderRadius: theme.borderRadius.md,
+                    color: theme.textPrimary,
+                    backgroundColor: theme.inputBackground,
+                  },
+                ]}
+                value={categoryName}
+                onChangeText={setCategoryName}
+                placeholder="Enter category name"
+                placeholderTextColor={theme.textMuted}
+                autoFocus
+              />
+              <View style={styles.modalActionRow}>
                 <TouchableOpacity
                   style={[
-                    styles.editButton,
+                    styles.primaryButton,
                     {
-                      borderColor: theme.primary,
-                      backgroundColor: theme.buttonSecondary,
-                      borderRadius: theme.borderRadius.sm,
+                      backgroundColor: theme.buttonPrimary,
+                      borderRadius: theme.borderRadius.md,
                     },
                   ]}
-                  onPress={() => handleStartEdit(item)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.editButtonText, { color: theme.primary }]}>Edit</Text>
+                  onPress={handleSaveOrAddCategory}
+                  activeOpacity={0.8}>
+                  <Text style={styles.primaryButtonText}>
+                    {editingId ? 'Save Category' : 'Add Category'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
-                    styles.deleteButton,
+                    styles.secondaryButton,
                     {
-                      borderColor: theme.danger,
                       backgroundColor: theme.buttonSecondary,
-                      borderRadius: theme.borderRadius.sm,
+                      borderColor: theme.cardBorder,
+                      borderRadius: theme.borderRadius.md,
                     },
                   ]}
-                  onPress={() => handleDeleteCategory(item.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.deleteButtonText, { color: theme.danger }]}>Delete</Text>
+                  onPress={clearForm}
+                  activeOpacity={0.8}>
+                  <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </SectionCard>
-          ))
-        )}
+            </View>
+          </View>
+        </Modal>
       </PageContainer>
     </ScrollView>
   );
 
   if (deviceType === 'desktop') {
-    return (
-      <DesktopShell title="Categories">
-        {pageContent}
-      </DesktopShell>
-    );
+    return <DesktopShell title="Categories">{pageContent}</DesktopShell>;
   }
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {pageContent}
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>{pageContent}</SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+  addButton: {
+    minHeight: 42,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  blockedMessage: {
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 12,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  categoryName: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  categoryMeta: {
+    fontSize: 14,
+  },
+  categoryScore: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  emptyCategoryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  kpiPreviewList: {
+    marginBottom: 14,
+  },
+  kpiPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  kpiPreviewName: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  kpiPreviewMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  kpiPreviewScore: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  primaryButton: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  secondaryButton: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  formModalCard: {
+    width: '100%',
+    maxWidth: 520,
+    borderWidth: 1,
+    padding: 18,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 14,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    color: 'white',
-    backgroundColor: '#1e293b',
-    marginBottom: 10,
-  },
-  button: {
-    backgroundColor: '#3b82f6',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    marginTop: 10,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#64748b',
-    backgroundColor: '#1e293b',
-  },
-  cancelButtonText: {
-    color: '#cbd5e1',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  blockedMessage: {
+    padding: 12,
     fontSize: 15,
-    color: '#fca5a5',
-    marginBottom: 12,
-    textAlign: 'center',
+    marginBottom: 14,
   },
-  list: {
-    flex: 1,
-  },
-  categoryText: {
-    color: 'white',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  buttonRow: {
+  modalActionRow: {
     flexDirection: 'row',
     gap: 10,
-  },
-  editButton: {
-    flex: 1,
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    backgroundColor: '#172554',
-  },
-  editButtonText: {
-    color: '#93c5fd',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  deleteButton: {
-    flex: 1,
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#dc2626',
-    backgroundColor: '#450a0a',
-  },
-  deleteButtonText: {
-    color: '#fca5a5',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

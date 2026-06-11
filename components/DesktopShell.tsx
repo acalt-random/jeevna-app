@@ -79,11 +79,6 @@ export function DesktopShell({ children, title }: DesktopShellProps) {
         </TouchableOpacity>
         <TouchableOpacity
           style={navItemStyle(theme)}
-          onPress={() => navigateTo('/life-buddy')}>
-          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Life Buddy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={navItemStyle(theme)}
           onPress={() => navigateTo('/preferences')}>
           <Text style={{ fontSize: 16, color: theme.textSecondary }}>Preferences</Text>
         </TouchableOpacity>

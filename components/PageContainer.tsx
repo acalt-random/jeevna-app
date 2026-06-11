@@ -1,7 +1,7 @@
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { useTheme } from '@/context/ThemeContext';
 import React from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 interface PageContainerProps {
   children: React.ReactNode;
@@ -11,6 +11,10 @@ interface PageContainerProps {
 export function PageContainer({ children, style }: PageContainerProps) {
   const deviceType = useDeviceType();
   const { theme } = useTheme();
+  const { width } = useWindowDimensions();
+  const isLargeScreen = deviceType === 'web' || deviceType === 'desktop';
+  const horizontalPadding = width >= 1440 ? theme.spacing.xl : theme.spacing.lg;
+  const maxWidth = width >= 1800 ? 1560 : width >= 1440 ? 1480 : 1380;
 
   return (
     <View
@@ -18,9 +22,10 @@ export function PageContainer({ children, style }: PageContainerProps) {
         {
           width: '100%',
           backgroundColor: theme.background,
-          padding: theme.spacing.lg,
+          paddingHorizontal: isLargeScreen ? 0 : horizontalPadding,
+          paddingVertical: isLargeScreen ? 0 : theme.spacing.lg,
         },
-        deviceType === 'web'
+        isLargeScreen
           ? {
               alignItems: 'center',
               padding: 0,
@@ -28,12 +33,14 @@ export function PageContainer({ children, style }: PageContainerProps) {
           : null,
         style,
       ]}>
-      {deviceType === 'web' ? (
+      {isLargeScreen ? (
         <View
           style={{
             width: '100%',
-            maxWidth: 1120,
-            padding: theme.spacing.xl,
+            maxWidth,
+            paddingHorizontal: horizontalPadding,
+            paddingTop: theme.spacing.lg,
+            paddingBottom: theme.spacing.xl,
           }}>
           {children}
         </View>

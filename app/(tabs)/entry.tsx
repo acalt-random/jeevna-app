@@ -6,14 +6,16 @@ import { SectionCard } from '@/components/SectionCard';
 import { useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 function todayYMD(): string {
@@ -26,16 +28,29 @@ function todayYMD(): string {
 
 export default function EntryScreen() {
   const { kpis, entries, saveEntry } = useAppData();
+  const params = useLocalSearchParams<{ kpiId?: string | string[] }>();
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [notesByKpi, setNotesByKpi] = useState<Record<string, string>>({});
   const [saveMessage, setSaveMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [score, setScore] = useState<number | null>(null);
+  const [selectedKpiId, setSelectedKpiId] = useState<string | null>(null);
+  const [kpiPickerOpen, setKpiPickerOpen] = useState(false);
   const { theme } = useTheme();
+  const routeKpiId = Array.isArray(params.kpiId) ? params.kpiId[0] : params.kpiId;
 
   const sortedKpis = useMemo(() => {
     return [...kpis].sort((a, b) => a.category.localeCompare(b.category));
   }, [kpis]);
+
+  const selectedKpi = useMemo(() => {
+    if (!selectedKpiId) return null;
+    return sortedKpis.find((kpi) => kpi.id === selectedKpiId) ?? null;
+  }, [selectedKpiId, sortedKpis]);
+
+  const displayedKpis = useMemo(() => {
+    return selectedKpi ? [selectedKpi] : sortedKpis;
+  }, [selectedKpi, sortedKpis]);
 
   useEffect(() => {
     const today = todayYMD();
@@ -50,6 +65,19 @@ export default function EntryScreen() {
     setNotesByKpi({});
     setScore(null);
   }, [entries]);
+
+  useEffect(() => {
+    if (!routeKpiId) {
+      setSelectedKpiId((currentValue) => {
+        if (!currentValue) return null;
+        return kpis.some((kpi) => kpi.id === currentValue) ? currentValue : null;
+      });
+      return;
+    }
+
+    const matchedKpi = kpis.find((kpi) => kpi.id === routeKpiId);
+    setSelectedKpiId(matchedKpi ? matchedKpi.id : null);
+  }, [kpis, routeKpiId]);
 
   const handleActualChange = (kpiId: string, value: string) => {
     setSaveMessage('');
@@ -155,7 +183,83 @@ export default function EntryScreen() {
           subtitle="Log today's KPI results and track your daily progress."
         />
 
-          {sortedKpis.map((kpi) => (
+        <SectionCard>
+          <Text style={[styles.selectorLabel, { color: theme.textPrimary }]}>KPI Selection</Text>
+          <TouchableOpacity
+            style={[
+              styles.kpiPicker,
+              {
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+                backgroundColor: theme.inputBackground,
+              },
+            ]}
+            onPress={() => setKpiPickerOpen((currentValue) => !currentValue)}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={[
+                styles.kpiPickerText,
+                { color: selectedKpi ? theme.textPrimary : theme.textMuted },
+              ]}
+            >
+              {selectedKpi
+                ? `${selectedKpi.name} (${selectedKpi.category})`
+                : 'All KPIs'}
+            </Text>
+          </TouchableOpacity>
+
+          {kpiPickerOpen ? (
+            <View
+              style={[
+                styles.kpiPickerDropdown,
+                {
+                  borderColor: theme.cardBorder,
+                  borderRadius: theme.borderRadius.md,
+                  backgroundColor: theme.cardBackground,
+                },
+              ]}
+            >
+              <ScrollView style={styles.kpiPickerScroll} nestedScrollEnabled>
+                <TouchableOpacity
+                  style={styles.kpiPickerOption}
+                  onPress={() => {
+                    setSelectedKpiId(null);
+                    setKpiPickerOpen(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.kpiPickerOptionText, { color: theme.textPrimary }]}>
+                    All KPIs
+                  </Text>
+                </TouchableOpacity>
+                {sortedKpis.map((kpi) => (
+                  <TouchableOpacity
+                    key={kpi.id}
+                    style={styles.kpiPickerOption}
+                    onPress={() => {
+                      setSelectedKpiId(kpi.id);
+                      setKpiPickerOpen(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.kpiPickerOptionText, { color: theme.textPrimary }]}>
+                      {kpi.name} ({kpi.category})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <Text style={[styles.selectorHint, { color: theme.textSecondary }]}>
+            {selectedKpi
+              ? 'Focused entry mode is active for the selected KPI.'
+              : 'Choose a KPI to focus on one entry, or leave it on all KPIs.'}
+          </Text>
+        </SectionCard>
+
+          {displayedKpis.map((kpi) => (
             <SectionCard key={kpi.id}>
               <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
               <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Category: {kpi.category}</Text>
@@ -245,6 +349,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#cbd5e1',
     marginBottom: 4,
+  },
+  selectorLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  selectorHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  kpiPicker: {
+    minHeight: 48,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  kpiPickerText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  kpiPickerDropdown: {
+    marginTop: 10,
+    borderWidth: 1,
+  },
+  kpiPickerScroll: {
+    maxHeight: 220,
+  },
+  kpiPickerOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  kpiPickerOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   input: {
     marginTop: 12,
