@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 
 import { createNavigationTheme } from '@/constants/themes';
 import { AppDataProvider } from '@/context/AppDataContext';
+import { PreferencesProvider } from '@/context/PreferencesContext';
 import { AppThemeProvider, useTheme } from '@/context/ThemeContext';
 
 export const unstable_settings = {
@@ -30,9 +31,11 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AppThemeProvider>
-      <AppDataProvider>
-        <RootNavigator />
-      </AppDataProvider>
+      <PreferencesProvider>
+        <AppDataProvider>
+          <RootNavigator />
+        </AppDataProvider>
+      </PreferencesProvider>
     </AppThemeProvider>
   );
 }

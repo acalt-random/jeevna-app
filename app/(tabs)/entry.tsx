@@ -27,7 +27,9 @@ function todayYMD(): string {
 export default function EntryScreen() {
   const { kpis, entries, saveEntry } = useAppData();
   const [actuals, setActuals] = useState<Record<string, string>>({});
+  const [notesByKpi, setNotesByKpi] = useState<Record<string, string>>({});
   const [saveMessage, setSaveMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [score, setScore] = useState<number | null>(null);
   const { theme } = useTheme();
 
@@ -40,12 +42,28 @@ export default function EntryScreen() {
     const todayEntry = entries.find((e) => e.date === today);
     if (todayEntry) {
       setActuals({ ...todayEntry.actuals });
+      setNotesByKpi({ ...(todayEntry.notes ?? {}) });
       setScore(todayEntry.totalScore);
+      return;
     }
+    setActuals({});
+    setNotesByKpi({});
+    setScore(null);
   }, [entries]);
 
   const handleActualChange = (kpiId: string, value: string) => {
+    setSaveMessage('');
+    setErrorMessage('');
     setActuals((prev) => ({
+      ...prev,
+      [kpiId]: value,
+    }));
+  };
+
+  const handleNotesChange = (kpiId: string, value: string) => {
+    setSaveMessage('');
+    setErrorMessage('');
+    setNotesByKpi((prev) => ({
       ...prev,
       [kpiId]: value,
     }));
@@ -54,6 +72,22 @@ export default function EntryScreen() {
   const deviceType = useDeviceType();
 
   const handleSave = () => {
+    const enteredValues = Object.values(actuals).map((value) => value.trim()).filter(Boolean);
+    if (enteredValues.length === 0) {
+      setSaveMessage('');
+      setErrorMessage('Enter at least one KPI actual value.');
+      return;
+    }
+
+    for (const kpi of kpis) {
+      const rawValue = actuals[kpi.id];
+      if (rawValue !== undefined && rawValue.trim() !== '' && Number.isNaN(parseFloat(rawValue))) {
+        setSaveMessage('');
+        setErrorMessage(`${kpi.name} must have a numeric actual value.`);
+        return;
+      }
+    }
+
     let totalScore = 0;
 
     for (const kpi of kpis) {
@@ -77,8 +111,9 @@ export default function EntryScreen() {
     }
 
     const rounded = Math.round(totalScore);
-    saveEntry(actuals, rounded);
+    saveEntry(actuals, rounded, notesByKpi);
     setScore(rounded);
+    setErrorMessage('');
     setSaveMessage('Data saved successfully');
 
     console.log('Actual entries:', actuals);
@@ -145,6 +180,23 @@ export default function EntryScreen() {
                 placeholder={`Enter actual (${kpi.unit})`}
                 placeholderTextColor={theme.textMuted}
               />
+
+              <TextInput
+                style={[
+                  styles.notesInput,
+                  {
+                    backgroundColor: theme.inputBackground,
+                    color: theme.textPrimary,
+                    borderColor: theme.cardBorder,
+                    borderRadius: theme.borderRadius.md,
+                  },
+                ]}
+                value={notesByKpi[kpi.id] || ''}
+                onChangeText={(value) => handleNotesChange(kpi.id, value)}
+                multiline
+                placeholder="Optional notes"
+                placeholderTextColor={theme.textMuted}
+              />
             </SectionCard>
           ))}
 
@@ -155,6 +207,7 @@ export default function EntryScreen() {
             <Text style={styles.buttonText}>Save</Text>
           </TouchableOpacity>
 
+          {errorMessage ? <Text style={[styles.error, { color: theme.danger }]}>{errorMessage}</Text> : null}
           {saveMessage ? <Text style={[styles.success, { color: theme.success }]}>{saveMessage}</Text> : null}
           {score !== null ? (
             <Text style={[styles.score, { color: theme.textPrimary }]}>{"Today's Score:"} {score}/100</Text>
@@ -203,6 +256,14 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
+  notesInput: {
+    marginTop: 10,
+    borderWidth: 1,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
   button: {
     backgroundColor: '#3b82f6',
     padding: 15,
@@ -220,6 +281,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     fontSize: 16,
+  },
+  error: {
+    textAlign: 'center',
+    marginTop: 16,
+    fontSize: 15,
   },
   score: {
     color: '#fff',

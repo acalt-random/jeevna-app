@@ -114,7 +114,21 @@ export interface DayEntry {
   id: string;
   date: string;
   actuals: Record<string, string>;
+  notes?: Record<string, string>;
   totalScore: number;
+}
+
+export interface ManagedEntry {
+  id: string;
+  kpiId: string;
+  date: string;
+  actual: string;
+  notes?: string;
+}
+
+export interface EntryMutationResult {
+  success: boolean;
+  error?: string;
 }
 
 function todayYMD(): string {
@@ -163,6 +177,28 @@ function totalScoreFromActuals(kpis: KPI[], actuals: Record<string, string>): nu
     total = 100;
   }
   return Math.round(total);
+}
+
+function parseManagedEntryId(entryId: string): { date: string; kpiId: string } | null {
+  const separatorIndex = entryId.indexOf('::');
+  if (separatorIndex <= 0) return null;
+
+  return {
+    date: entryId.slice(0, separatorIndex),
+    kpiId: entryId.slice(separatorIndex + 2),
+  };
+}
+
+function cleanNotesMap(notes?: Record<string, string>): Record<string, string> | undefined {
+  if (!notes) return undefined;
+
+  const next = Object.fromEntries(
+    Object.entries(notes)
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value.length > 0)
+  );
+
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 const SAMPLE_KP_IDS = {
@@ -271,7 +307,21 @@ interface AppDataContextType {
   updateKPI: (updatedKpi: KPI) => void;
   deleteKPI: (id: string) => void;
   deleteCategory: (id: string) => boolean;
-  saveEntry: (actuals: Record<string, string>, totalScore: number) => void;
+  saveEntry: (
+    actuals: Record<string, string>,
+    totalScore: number,
+    notes?: Record<string, string>
+  ) => void;
+  createEntry: (entry: Omit<ManagedEntry, 'id'>) => EntryMutationResult;
+  updateEntry: (
+    entryId: string,
+    updates: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
+  ) => EntryMutationResult;
+  deleteEntry: (entryId: string) => EntryMutationResult;
+  duplicateEntry: (
+    entryId: string,
+    overrides?: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
+  ) => EntryMutationResult;
   applyTemplatePack: (pack: TemplatePackPayload) => void;
   // ─── NEW: Contacts ───
   savedContacts: SavedContact[];
@@ -308,6 +358,18 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [personTodos, setPersonTodos] = useState<PersonTodo[]>([]);
   // ──────────
   const [isHydrated, setIsHydrated] = useState(false);
+
+  const syncLatestEntryState = (nextEntries: DayEntry[]) => {
+    if (nextEntries.length === 0) {
+      setLatestActuals({});
+      setLatestScore(null);
+      return;
+    }
+
+    const latestEntry = [...nextEntries].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+    setLatestActuals(latestEntry?.actuals ?? {});
+    setLatestScore(latestEntry?.totalScore ?? null);
+  };
 
   // ─── Load all data from AsyncStorage on mount ──────────────────────────────
   useEffect(() => {
@@ -354,7 +416,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         }
         const savedPeople = await AsyncStorage.getItem('people');
         if (savedPeople) {
-          const parsedPeople = JSON.parse(savedPeople) as Array<Partial<Person>>;
+          const parsedPeople = JSON.parse(savedPeople) as Partial<Person>[];
           setPeople(
             parsedPeople.map((person) => ({
               id: person.id ?? `person-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -529,7 +591,11 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // ──────────────────────────────────────────────────────────────────────────
 
-  const saveEntry = (actuals: Record<string, string>, totalScore: number) => {
+  const saveEntry = (
+    actuals: Record<string, string>,
+    totalScore: number,
+    notes?: Record<string, string>
+  ) => {
     const date = todayYMD();
     const roundedScore = Math.round(totalScore);
 
@@ -539,16 +605,209 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         id: index >= 0 ? prev[index].id : Date.now().toString(),
         date,
         actuals: { ...actuals },
+        notes: cleanNotesMap(notes),
         totalScore: roundedScore,
       };
-      if (index >= 0) {
-        return prev.map((e, i) => (i === index ? nextEntry : e));
-      }
-      return [...prev, nextEntry];
+      const nextEntries =
+        index >= 0
+          ? prev.map((e, i) => (i === index ? nextEntry : e))
+          : [...prev, nextEntry];
+
+      syncLatestEntryState(nextEntries);
+      return nextEntries;
+    });
+  };
+
+  const createEntry = (entry: Omit<ManagedEntry, 'id'>): EntryMutationResult => {
+    const trimmedDate = entry.date.trim();
+    const trimmedActual = entry.actual.trim();
+    const trimmedNotes = entry.notes?.trim();
+    const kpi = kpis.find((item) => item.id === entry.kpiId);
+
+    if (!kpi) return { success: false, error: 'Please select a valid KPI.' };
+    if (!trimmedDate) return { success: false, error: 'Please enter a date.' };
+    if (!trimmedActual) return { success: false, error: 'Please enter an actual value.' };
+    if (Number.isNaN(parseFloat(trimmedActual))) {
+      return { success: false, error: 'Actual value must be numeric.' };
+    }
+
+    const existingDay = entries.find((dayEntry) => dayEntry.date === trimmedDate);
+    if (existingDay?.actuals[entry.kpiId] !== undefined && existingDay.actuals[entry.kpiId] !== '') {
+      return { success: false, error: 'This KPI already has an entry for that date.' };
+    }
+
+    setEntries((prev) => {
+      const dayIndex = prev.findIndex((dayEntry) => dayEntry.date === trimmedDate);
+      const targetDay = dayIndex >= 0 ? prev[dayIndex] : undefined;
+      const nextActuals = {
+        ...(targetDay?.actuals ?? {}),
+        [entry.kpiId]: trimmedActual,
+      };
+      const nextNotes = cleanNotesMap({
+        ...(targetDay?.notes ?? {}),
+        [entry.kpiId]: trimmedNotes ?? '',
+      });
+      const nextDay: DayEntry = {
+        id: targetDay?.id ?? Date.now().toString(),
+        date: trimmedDate,
+        actuals: nextActuals,
+        notes: nextNotes,
+        totalScore: totalScoreFromActuals(kpis, nextActuals),
+      };
+
+      const nextEntries =
+        dayIndex >= 0
+          ? prev.map((dayEntry, index) => (index === dayIndex ? nextDay : dayEntry))
+          : [...prev, nextDay];
+
+      syncLatestEntryState(nextEntries);
+      return nextEntries;
     });
 
-    setLatestActuals({ ...actuals });
-    setLatestScore(roundedScore);
+    return { success: true };
+  };
+
+  const updateEntry = (
+    entryId: string,
+    updates: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
+  ): EntryMutationResult => {
+    const parsed = parseManagedEntryId(entryId);
+    if (!parsed) return { success: false, error: 'Could not find that entry.' };
+
+    const sourceDay = entries.find((entry) => entry.date === parsed.date);
+    const currentActual = sourceDay?.actuals[parsed.kpiId];
+    if (!sourceDay || currentActual === undefined || currentActual === '') {
+      return { success: false, error: 'Could not find that entry.' };
+    }
+
+    const nextDate = updates.date?.trim() || parsed.date;
+    const nextActual = updates.actual?.trim() ?? currentActual;
+    const nextNotes = updates.notes?.trim() ?? sourceDay.notes?.[parsed.kpiId] ?? '';
+
+    if (!nextDate) return { success: false, error: 'Please enter a date.' };
+    if (!nextActual) return { success: false, error: 'Please enter an actual value.' };
+    if (Number.isNaN(parseFloat(nextActual))) {
+      return { success: false, error: 'Actual value must be numeric.' };
+    }
+
+    if (nextDate !== parsed.date) {
+      const targetDay = entries.find((entry) => entry.date === nextDate);
+      if (targetDay?.actuals[parsed.kpiId] !== undefined && targetDay.actuals[parsed.kpiId] !== '') {
+        return { success: false, error: 'This KPI already has an entry for that date.' };
+      }
+    }
+
+    setEntries((prev) => {
+      const nextEntries: DayEntry[] = [];
+
+      prev.forEach((dayEntry) => {
+        if (dayEntry.date === parsed.date) {
+          const nextActuals = { ...dayEntry.actuals };
+          const nextNotesMap = { ...(dayEntry.notes ?? {}) };
+
+          delete nextActuals[parsed.kpiId];
+          delete nextNotesMap[parsed.kpiId];
+
+          if (Object.keys(nextActuals).length > 0) {
+            nextEntries.push({
+              ...dayEntry,
+              actuals: nextActuals,
+              notes: cleanNotesMap(nextNotesMap),
+              totalScore: totalScoreFromActuals(kpis, nextActuals),
+            });
+          }
+          return;
+        }
+
+        nextEntries.push(dayEntry);
+      });
+
+      const targetIndex = nextEntries.findIndex((dayEntry) => dayEntry.date === nextDate);
+      const targetDay = targetIndex >= 0 ? nextEntries[targetIndex] : undefined;
+      const mergedActuals = {
+        ...(targetDay?.actuals ?? {}),
+        [parsed.kpiId]: nextActual,
+      };
+      const mergedNotes = cleanNotesMap({
+        ...(targetDay?.notes ?? {}),
+        [parsed.kpiId]: nextNotes,
+      });
+      const nextDay: DayEntry = {
+        id: targetDay?.id ?? `entry-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        date: nextDate,
+        actuals: mergedActuals,
+        notes: mergedNotes,
+        totalScore: totalScoreFromActuals(kpis, mergedActuals),
+      };
+
+      const mergedEntries =
+        targetIndex >= 0
+          ? nextEntries.map((dayEntry, index) => (index === targetIndex ? nextDay : dayEntry))
+          : [...nextEntries, nextDay];
+
+      syncLatestEntryState(mergedEntries);
+      return mergedEntries;
+    });
+
+    return { success: true };
+  };
+
+  const deleteEntry = (entryId: string): EntryMutationResult => {
+    const parsed = parseManagedEntryId(entryId);
+    if (!parsed) return { success: false, error: 'Could not find that entry.' };
+
+    const sourceDay = entries.find((entry) => entry.date === parsed.date);
+    if (!sourceDay || sourceDay.actuals[parsed.kpiId] === undefined || sourceDay.actuals[parsed.kpiId] === '') {
+      return { success: false, error: 'Could not find that entry.' };
+    }
+
+    setEntries((prev) => {
+      const nextEntries = prev.flatMap((dayEntry) => {
+        if (dayEntry.date !== parsed.date) return [dayEntry];
+
+        const nextActuals = { ...dayEntry.actuals };
+        const nextNotes = { ...(dayEntry.notes ?? {}) };
+        delete nextActuals[parsed.kpiId];
+        delete nextNotes[parsed.kpiId];
+
+        if (Object.keys(nextActuals).length === 0) return [];
+
+        return [
+          {
+            ...dayEntry,
+            actuals: nextActuals,
+            notes: cleanNotesMap(nextNotes),
+            totalScore: totalScoreFromActuals(kpis, nextActuals),
+          },
+        ];
+      });
+
+      syncLatestEntryState(nextEntries);
+      return nextEntries;
+    });
+
+    return { success: true };
+  };
+
+  const duplicateEntry = (
+    entryId: string,
+    overrides?: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
+  ): EntryMutationResult => {
+    const parsed = parseManagedEntryId(entryId);
+    if (!parsed) return { success: false, error: 'Could not find that entry.' };
+
+    const sourceDay = entries.find((entry) => entry.date === parsed.date);
+    const sourceActual = sourceDay?.actuals[parsed.kpiId];
+    if (!sourceDay || sourceActual === undefined || sourceActual === '') {
+      return { success: false, error: 'Could not find that entry.' };
+    }
+
+    return createEntry({
+      kpiId: parsed.kpiId,
+      date: overrides?.date?.trim() || todayYMD(),
+      actual: overrides?.actual?.trim() || sourceActual,
+      notes: overrides?.notes ?? sourceDay.notes?.[parsed.kpiId] ?? '',
+    });
   };
 
   const addCategory = (name: string) => {
@@ -951,6 +1210,10 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         deleteKPI,
         deleteCategory,
         saveEntry,
+        createEntry,
+        updateEntry,
+        deleteEntry,
+        duplicateEntry,
         applyTemplatePack,
         loadSampleData,
         clearAllData,

@@ -3,6 +3,11 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
+import {
+  LifeBuddyScoringPreferences,
+  ScoringSection,
+  usePreferences,
+} from '@/context/PreferencesContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import Constants from 'expo-constants';
@@ -33,8 +38,106 @@ function PlaceholderRow({
   );
 }
 
+function WeightControlRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.weightRow,
+        {
+          borderBottomColor: theme.cardBorder,
+        },
+      ]}>
+      <View style={styles.weightTextBlock}>
+        <Text style={[styles.weightLabel, { color: theme.textPrimary }]}>{label}</Text>
+      </View>
+      <View style={styles.weightControls}>
+        <TouchableOpacity
+          style={[
+            styles.stepButton,
+            {
+              backgroundColor: theme.buttonSecondary,
+              borderColor: theme.cardBorder,
+              borderRadius: theme.borderRadius.sm,
+            },
+          ]}
+          onPress={() => onChange(value - 1)}
+          activeOpacity={0.8}>
+          <Text style={[styles.stepButtonText, { color: theme.textPrimary }]}>-</Text>
+        </TouchableOpacity>
+        <View
+          style={[
+            styles.valueBadge,
+            {
+              backgroundColor: theme.inputBackground,
+              borderColor: theme.cardBorder,
+              borderRadius: theme.borderRadius.sm,
+            },
+          ]}>
+          <Text style={[styles.valueText, { color: theme.textPrimary }]}>{value}</Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.stepButton,
+            {
+              backgroundColor: theme.buttonSecondary,
+              borderColor: theme.cardBorder,
+              borderRadius: theme.borderRadius.sm,
+            },
+          ]}
+          onPress={() => onChange(value + 1)}
+          activeOpacity={0.8}>
+          <Text style={[styles.stepButtonText, { color: theme.textPrimary }]}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function LifeBuddyWeightSection({
+  title,
+  section,
+  values,
+  onChange,
+}: {
+  title: string;
+  section: ScoringSection;
+  values: LifeBuddyScoringPreferences[ScoringSection];
+  onChange: (section: ScoringSection, label: string, value: number) => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <View style={styles.preferenceGroup}>
+      <Text style={[styles.groupTitle, { color: theme.primary }]}>{title}</Text>
+      {Object.entries(values).map(([label, value]) => (
+        <WeightControlRow
+          key={`${section}-${label}`}
+          label={label}
+          value={value}
+          onChange={(nextValue) => onChange(section, label, nextValue)}
+        />
+      ))}
+    </View>
+  );
+}
+
 export default function PreferencesScreen() {
   const { theme, themes, selectedThemeId, setSelectedThemeId } = useTheme();
+  const {
+    lifeBuddyScoringPreferences,
+    updateLifeBuddyScoringPreference,
+    resetLifeBuddyScoringPreferences,
+  } = usePreferences();
   const deviceType = useDeviceType();
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -103,6 +206,56 @@ export default function PreferencesScreen() {
             title="Font size"
             subtitle="Placeholder for future text scaling and reading comfort controls."
           />
+        </SectionCard>
+
+        <SectionCard
+          style={{
+            backgroundColor: theme.secondaryBackground,
+            borderColor: theme.cardBorder,
+          }}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Life Buddy Settings</Text>
+          <Text style={[styles.sectionHint, { color: theme.textSecondary }]}>
+            Customize the importance, urgency, and impact weights Life Buddy shows in its scoring guidance.
+          </Text>
+
+          <LifeBuddyWeightSection
+            title="Category Importance"
+            section="categoryImportance"
+            values={lifeBuddyScoringPreferences.categoryImportance}
+            onChange={updateLifeBuddyScoringPreference}
+          />
+          <LifeBuddyWeightSection
+            title="Relationship Importance"
+            section="relationshipImportance"
+            values={lifeBuddyScoringPreferences.relationshipImportance}
+            onChange={updateLifeBuddyScoringPreference}
+          />
+          <LifeBuddyWeightSection
+            title="Urgency Weights"
+            section="urgencyWeights"
+            values={lifeBuddyScoringPreferences.urgencyWeights}
+            onChange={updateLifeBuddyScoringPreference}
+          />
+          <LifeBuddyWeightSection
+            title="Impact Weights"
+            section="impactWeights"
+            values={lifeBuddyScoringPreferences.impactWeights}
+            onChange={updateLifeBuddyScoringPreference}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.resetButton,
+              {
+                backgroundColor: theme.buttonSecondary,
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+              },
+            ]}
+            onPress={resetLifeBuddyScoringPreferences}
+            activeOpacity={0.85}>
+            <Text style={[styles.resetButtonText, { color: theme.textPrimary }]}>Reset to Defaults</Text>
+          </TouchableOpacity>
         </SectionCard>
 
         <SectionCard
@@ -207,5 +360,70 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     borderWidth: 1,
+  },
+  preferenceGroup: {
+    marginTop: 10,
+  },
+  groupTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  weightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  weightTextBlock: {
+    flex: 1,
+  },
+  weightLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  weightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  stepButtonText: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  valueBadge: {
+    minWidth: 42,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+  },
+  valueText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  resetButton: {
+    minHeight: 46,
+    marginTop: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 16,
+  },
+  resetButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
