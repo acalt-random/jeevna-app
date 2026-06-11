@@ -103,6 +103,50 @@ function WeightControlRow({
   );
 }
 
+function TogglePreferenceRow({
+  title,
+  subtitle,
+  value,
+  onToggle,
+}: {
+  title: string;
+  subtitle: string;
+  value: boolean;
+  onToggle: () => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.weightRow,
+        {
+          borderBottomColor: theme.cardBorder,
+        },
+      ]}>
+      <View style={styles.weightTextBlock}>
+        <Text style={[styles.weightLabel, { color: theme.textPrimary }]}>{title}</Text>
+        <Text style={[styles.toggleSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
+      </View>
+      <TouchableOpacity
+        style={[
+          styles.toggleBadge,
+          {
+            backgroundColor: value ? theme.buttonPrimary : theme.buttonSecondary,
+            borderColor: value ? theme.buttonPrimary : theme.cardBorder,
+            borderRadius: theme.borderRadius.sm,
+          },
+        ]}
+        onPress={onToggle}
+        activeOpacity={0.85}>
+        <Text style={[styles.toggleBadgeText, { color: value ? '#ffffff' : theme.textPrimary }]}>
+          {value ? 'On' : 'Off'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function LifeBuddyWeightSection({
   title,
   section,
@@ -134,6 +178,10 @@ function LifeBuddyWeightSection({
 export default function PreferencesScreen() {
   const { theme, themes, selectedThemeId, setSelectedThemeId } = useTheme();
   const {
+    onboardingCompleted,
+    reminderPreferences,
+    updateReminderPreference,
+    resetReminderPreferences,
     lifeBuddyScoringPreferences,
     updateLifeBuddyScoringPreference,
     resetLifeBuddyScoringPreferences,
@@ -264,14 +312,42 @@ export default function PreferencesScreen() {
             borderColor: theme.cardBorder,
           }}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Notifications</Text>
-          <PlaceholderRow
+          <TogglePreferenceRow
             title="KPI reminders"
-            subtitle="Placeholder for future daily KPI reminder settings."
+            subtitle="Default reminder preference for logging your KPIs."
+            value={reminderPreferences.kpiReminders}
+            onToggle={() => updateReminderPreference('kpiReminders', !reminderPreferences.kpiReminders)}
           />
-          <PlaceholderRow
+          <TogglePreferenceRow
             title="Relationship reminders"
-            subtitle="Placeholder for future people follow-up reminder settings."
+            subtitle="Default reminder preference for following up with people."
+            value={reminderPreferences.relationshipReminders}
+            onToggle={() =>
+              updateReminderPreference(
+                'relationshipReminders',
+                !reminderPreferences.relationshipReminders
+              )
+            }
           />
+          <TogglePreferenceRow
+            title="Weekly review"
+            subtitle="Default reminder preference for your weekly reset and review."
+            value={reminderPreferences.weeklyReview}
+            onToggle={() => updateReminderPreference('weeklyReview', !reminderPreferences.weeklyReview)}
+          />
+          <TouchableOpacity
+            style={[
+              styles.resetButton,
+              {
+                backgroundColor: theme.buttonSecondary,
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+              },
+            ]}
+            onPress={resetReminderPreferences}
+            activeOpacity={0.85}>
+            <Text style={[styles.resetButtonText, { color: theme.textPrimary }]}>Reset Reminder Defaults</Text>
+          </TouchableOpacity>
         </SectionCard>
 
         <SectionCard
@@ -307,6 +383,10 @@ export default function PreferencesScreen() {
           <PlaceholderRow
             title="Current theme"
             subtitle={theme.name}
+          />
+          <PlaceholderRow
+            title="Onboarding"
+            subtitle={onboardingCompleted ? 'Completed' : 'Not completed'}
           />
           <PlaceholderRow
             title="Privacy Policy"
@@ -386,6 +466,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 20,
   },
+  toggleSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+  },
   weightControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -413,6 +498,18 @@ const styles = StyleSheet.create({
   valueText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  toggleBadge: {
+    minWidth: 62,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+  },
+  toggleBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   resetButton: {
     minHeight: 46,

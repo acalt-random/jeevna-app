@@ -279,7 +279,7 @@ interface AppDataContextType {
   // ─── NEW ───
   subtasks: Subtask[];
   subtaskLogs: SubtaskLog[];
-  addSubtask: (subtask: Omit<Subtask, 'id'>) => void;
+  addSubtask: (subtask: Omit<Subtask, 'id'>) => Subtask;
   updateSubtask: (subtask: Subtask) => void;
   deleteSubtask: (id: string) => void;
   toggleSubtaskLog: (subtaskId: string, date: string) => void;
@@ -295,7 +295,7 @@ interface AppDataContextType {
   getActivitiesForPerson: (personId: string) => PersonActivity[];
   // ─── Person To-Dos ───
   personTodos: PersonTodo[];
-  addPersonTodo: (todo: Omit<PersonTodo, 'id'>) => void;
+  addPersonTodo: (todo: Omit<PersonTodo, 'id'>) => PersonTodo;
   updatePersonTodo: (todo: PersonTodo) => void;
   deletePersonTodo: (todoId: string) => void;
   togglePersonTodo: (todoId: string) => void;
@@ -303,7 +303,13 @@ interface AppDataContextType {
   // ──────────────────────
   addCategory: (name: string) => void;
   updateCategory: (id: string, newName: string) => void;
-  addKPI: (kpi: { name: string; category: string; target: number; unit: string; weight: number }) => void;
+  addKPI: (kpi: {
+    name: string;
+    category: string;
+    target: number;
+    unit: string;
+    weight: number;
+  }) => KPI;
   updateKPI: (updatedKpi: KPI) => void;
   deleteKPI: (id: string) => void;
   deleteCategory: (id: string) => boolean;
@@ -331,7 +337,7 @@ interface AppDataContextType {
   // ──────────────────────
   // ─── People CRM ───
   people: Person[];
-  addPerson: (person: Omit<Person, 'id'>) => void;
+  addPerson: (person: Omit<Person, 'id'>) => Person;
   updatePerson: (person: Person) => void;
   deletePerson: (id: string) => void;
   getRelationshipsScore: (personId: string) => number;
@@ -836,7 +842,13 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     );
   };
 
-  const addKPI = (kpi: { name: string; category: string; target: number; unit: string; weight: number }) => {
+  const addKPI = (kpi: {
+    name: string;
+    category: string;
+    target: number;
+    unit: string;
+    weight: number;
+  }): KPI => {
     console.log('addKPI called with', kpi);
     const newKPI: KPI = {
       id: Date.now().toString(),
@@ -844,6 +856,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
     console.log('newKPI:', newKPI);
     setKpis(prev => [...prev, newKPI]);
+    return newKPI;
   };
 
   const updateKPI = (updatedKpi: KPI) => {
@@ -867,12 +880,13 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // ─── NEW: Subtask CRUD ─────────────────────────────────────────────────────
 
-  const addSubtask = (subtask: Omit<Subtask, 'id'>) => {
+  const addSubtask = (subtask: Omit<Subtask, 'id'>): Subtask => {
     const newSubtask: Subtask = {
       id: Date.now().toString(),
       ...subtask,
     };
     setSubtasks(prev => [...prev, newSubtask]);
+    return newSubtask;
   };
 
   const updateSubtask = (updated: Subtask) => {
@@ -941,12 +955,13 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       .filter((activity) => activity.personId === personId)
       .sort((a, b) => b.date.localeCompare(a.date));
 
-  const addPersonTodo = (todo: Omit<PersonTodo, 'id'>) => {
+  const addPersonTodo = (todo: Omit<PersonTodo, 'id'>): PersonTodo => {
     const newTodo: PersonTodo = {
       id: `perstodo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       ...todo,
     };
     setPersonTodos(prev => [...prev, newTodo]);
+    return newTodo;
   };
 
   const updatePersonTodo = (todo: PersonTodo) => {
@@ -1063,15 +1078,17 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
   };
 
-  const addPerson = (person: Omit<Person, 'id'>) => {
+  const addPerson = (person: Omit<Person, 'id'>): Person => {
     const id = `person-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const newPerson: Person = { ...person, id };
     setPeople((prev) => {
-      const updated = [...prev, { ...person, id }];
+      const updated = [...prev, newPerson];
       AsyncStorage.setItem('people', JSON.stringify(updated)).catch((e) => 
         console.error('Error saving people', e)
       );
       return updated;
     });
+    return newPerson;
   };
 
   const updatePerson = (person: Person) => {

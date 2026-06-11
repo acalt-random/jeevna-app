@@ -18,6 +18,8 @@ function RootNavigator() {
   return (
     <NavigationThemeProvider value={createNavigationTheme(theme)}>
       <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="life-buddy" options={{ headerShown: false }} />
         <Stack.Screen name="preferences" options={{ headerShown: false }} />

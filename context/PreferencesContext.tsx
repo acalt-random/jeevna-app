@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 export const LIFE_BUDDY_SCORING_PREFERENCES_KEY = 'lifeKpi_lifeBuddyScoringPreferences';
+export const ONBOARDING_COMPLETED_KEY = 'lifeKpi_onboardingCompleted';
+export const REMINDER_PREFERENCES_KEY = 'lifeKpi_reminderPreferences';
 
 export type ScoringSection =
   | 'categoryImportance'
@@ -10,6 +12,12 @@ export type ScoringSection =
   | 'impactWeights';
 
 export type WeightMap = Record<string, number>;
+
+export interface ReminderPreferences {
+  kpiReminders: boolean;
+  relationshipReminders: boolean;
+  weeklyReview: boolean;
+}
 
 export interface LifeBuddyScoringPreferences {
   categoryImportance: WeightMap;
@@ -64,6 +72,12 @@ export const defaultLifeBuddyScoringPreferences: LifeBuddyScoringPreferences = {
   },
 };
 
+export const defaultReminderPreferences: ReminderPreferences = {
+  kpiReminders: true,
+  relationshipReminders: true,
+  weeklyReview: true,
+};
+
 function clampWeight(value: number): number {
   return Math.max(0, Math.min(10, Math.round(value)));
 }
@@ -92,7 +106,13 @@ function mergeWithDefaults(
 }
 
 interface PreferencesContextValue {
+  preferencesHydrated: boolean;
+  onboardingCompleted: boolean;
+  reminderPreferences: ReminderPreferences;
   lifeBuddyScoringPreferences: LifeBuddyScoringPreferences;
+  setOnboardingCompleted: (value: boolean) => void;
+  updateReminderPreference: (key: keyof ReminderPreferences, value: boolean) => void;
+  resetReminderPreferences: () => void;
   updateLifeBuddyScoringPreference: (
     section: ScoringSection,
     label: string,
@@ -106,6 +126,9 @@ const PreferencesContext = createContext<PreferencesContextValue | undefined>(un
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [lifeBuddyScoringPreferences, setLifeBuddyScoringPreferences] =
     useState<LifeBuddyScoringPreferences>(defaultLifeBuddyScoringPreferences);
+  const [reminderPreferences, setReminderPreferences] =
+    useState<ReminderPreferences>(defaultReminderPreferences);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -115,6 +138,20 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         if (savedValue) {
           const parsed = JSON.parse(savedValue) as Partial<LifeBuddyScoringPreferences>;
           setLifeBuddyScoringPreferences(mergeWithDefaults(parsed));
+        }
+
+        const savedReminderPreferences = await AsyncStorage.getItem(REMINDER_PREFERENCES_KEY);
+        if (savedReminderPreferences) {
+          const parsed = JSON.parse(savedReminderPreferences) as Partial<ReminderPreferences>;
+          setReminderPreferences({
+            ...defaultReminderPreferences,
+            ...parsed,
+          });
+        }
+
+        const savedOnboardingCompleted = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        if (savedOnboardingCompleted !== null) {
+          setOnboardingCompleted(savedOnboardingCompleted === 'true');
         }
       } catch (error) {
         console.error('Error loading Life Buddy scoring preferences', error);
@@ -137,9 +174,43 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     });
   }, [isHydrated, lifeBuddyScoringPreferences]);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(
+      REMINDER_PREFERENCES_KEY,
+      JSON.stringify(reminderPreferences)
+    ).catch((error) => {
+      console.error('Error saving reminder preferences', error);
+    });
+  }, [isHydrated, reminderPreferences]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, onboardingCompleted ? 'true' : 'false').catch(
+      (error) => {
+        console.error('Error saving onboarding status', error);
+      }
+    );
+  }, [isHydrated, onboardingCompleted]);
+
   const value = useMemo<PreferencesContextValue>(() => {
     return {
+      preferencesHydrated: isHydrated,
+      onboardingCompleted,
+      reminderPreferences,
       lifeBuddyScoringPreferences,
+      setOnboardingCompleted,
+      updateReminderPreference: (key, value) => {
+        setReminderPreferences((prev) => ({
+          ...prev,
+          [key]: value,
+        }));
+      },
+      resetReminderPreferences: () => {
+        setReminderPreferences(defaultReminderPreferences);
+      },
       updateLifeBuddyScoringPreference: (section, label, value) => {
         setLifeBuddyScoringPreferences((prev) => ({
           ...prev,
@@ -153,7 +224,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         setLifeBuddyScoringPreferences(defaultLifeBuddyScoringPreferences);
       },
     };
-  }, [lifeBuddyScoringPreferences]);
+  }, [isHydrated, lifeBuddyScoringPreferences, onboardingCompleted, reminderPreferences]);
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
