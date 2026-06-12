@@ -1,9 +1,11 @@
 import { DesktopShell } from '@/components/DesktopShell';
 import { EmptyState } from '@/components/EmptyState';
+import { LifeBuddySuggestions } from '@/components/LifeBuddySuggestions';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
+import { TodaysResponsibilities } from '@/components/TodaysResponsibilities';
 import { MaterialIcons } from '@expo/vector-icons';
 import { KPI, useAppData } from '@/context/AppDataContext';
 import {
@@ -11,6 +13,12 @@ import {
   ScoringSection,
   usePreferences,
 } from '@/context/PreferencesContext';
+import { buildLifeBuddySuggestions, LifeBuddySuggestion } from '@/services/suggestionEngine';
+import {
+  buildResponsibilitySnapshot,
+  ResponsibilityItem,
+} from '@/services/responsibilityEngine';
+import { lifeLibraryActivities, lifeLibraryKpis } from '@/src/data/lifeLibrary';
 import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import {
@@ -724,11 +732,17 @@ export default function HomeScreen() {
     addCategory,
     addKPI,
     addSubtask,
+    toggleSubtaskLog,
     people,
     personActivities,
     personTodos,
   } = useAppData();
-  const { lifeBuddyScoringPreferences } = usePreferences();
+  const {
+    lifeBuddyScoringPreferences,
+    onboardingProfile,
+    suggestionDismissedUntil,
+    dismissSuggestionUntil,
+  } = usePreferences();
   const { theme } = useTheme();
   const deviceType = useDeviceType();
   const router = useRouter();
@@ -794,11 +808,26 @@ export default function HomeScreen() {
     return match?.name;
   }, [categories]);
 
+  const responsibilitySnapshot = useMemo(
+    () =>
+      buildResponsibilitySnapshot({
+        categories,
+        kpis,
+        subtasks,
+        subtaskLogs,
+        today,
+      }),
+    [categories, kpis, subtasks, subtaskLogs, today]
+  );
+
   const categoryRows = useMemo(() => {
     return categories.map((cat) => {
       const kpisInCat = kpis.filter((kpi) => kpi.category === cat.name);
       let achieved = 0;
       let maxWeight = 0;
+      const responsibilityScore =
+        responsibilitySnapshot.categoryScores.find((score) => score.categoryName === cat.name)
+          ?.responsibilityScore ?? 0;
 
       for (const kpi of kpisInCat) {
         maxWeight += kpi.weight;
@@ -810,11 +839,12 @@ export default function HomeScreen() {
         id: cat.id,
         name: cat.name,
         score100,
+        responsibilityScore,
         maxWeight,
         status: statusForScore(score100),
       };
     });
-  }, [categories, kpis, latestActuals]);
+  }, [categories, kpis, latestActuals, responsibilitySnapshot.categoryScores]);
 
   const weakestCategory = useMemo<WeakCategory>(() => {
     const rows = categories
@@ -905,23 +935,32 @@ export default function HomeScreen() {
       }));
   }, [entriesByDate, kpis, todayActuals]);
 
-  const pendingSubtasksToday = useMemo<PendingSubtask[]>(() => {
-    return subtasks
-      .filter((subtask) => {
-        return !subtaskLogs.some(
-          (log) => log.subtaskId === subtask.id && log.date === today && log.completed
-        );
-      })
-      .map((subtask) => {
-        const kpi = kpis.find((item) => item.id === subtask.kpiId);
-        return {
-          id: subtask.id,
-          name: subtask.name,
-          kpiName: kpi?.name ?? 'Unknown KPI',
-          category: kpi?.category ?? 'Unknown category',
-        };
-      });
-  }, [kpis, subtasks, subtaskLogs, today]);
+  const pendingSubtasksToday = useMemo<PendingSubtask[]>(
+    () =>
+      responsibilitySnapshot.dueToday.map((item) => ({
+        id: item.subtaskId,
+        name: item.title,
+        kpiName: item.kpiName,
+        category: item.category,
+      })),
+    [responsibilitySnapshot.dueToday]
+  );
+
+  const overdueResponsibilities = useMemo(
+    () => responsibilitySnapshot.overdue,
+    [responsibilitySnapshot.overdue]
+  );
+
+  const lifeBuddySuggestions = useMemo(() => {
+    return buildLifeBuddySuggestions({
+      profile: onboardingProfile,
+      activeCategories: categories,
+      activeKpis: kpis,
+      activeSubtasks: subtasks,
+      suggestionDismissedUntil,
+      limit: 6,
+    });
+  }, [categories, kpis, onboardingProfile, subtasks, suggestionDismissedUntil]);
 
   const lastSevenChronological = useMemo(() => {
     return [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
@@ -1031,6 +1070,82 @@ export default function HomeScreen() {
     [relationshipCategoryName, router]
   );
 
+  const handleActivateSuggestion = useCallback(
+    (suggestion: LifeBuddySuggestion) => {
+      const categoryName = suggestion.category.trim();
+      if (!categoryName) return;
+
+      const existingCategory = categories.find(
+        (category) => category.name.trim().toLowerCase() === categoryName.toLowerCase()
+      );
+      if (!existingCategory) {
+        addCategory(categoryName);
+      }
+
+      const libraryKpi = suggestion.kpiId
+        ? lifeLibraryKpis.find((kpi) => kpi.id === suggestion.kpiId)
+        : undefined;
+      const kpiName = suggestion.kpiName ?? suggestion.title;
+
+      let activeKpi = kpis.find(
+        (kpi) =>
+          kpi.name.trim().toLowerCase() === kpiName.trim().toLowerCase() &&
+          kpi.category.trim().toLowerCase() === categoryName.toLowerCase()
+      );
+
+      if (!activeKpi) {
+        activeKpi =
+          addKPI({
+            name: kpiName,
+            category: categoryName,
+            target: libraryKpi?.target ?? 1,
+            unit: libraryKpi?.unit ?? 'count',
+            weight: libraryKpi?.weight ?? Math.max(1, Math.min(10, suggestion.importanceScore)),
+          }) ?? activeKpi;
+      }
+
+      if (!activeKpi) return;
+
+      if (suggestion.activityName) {
+        const existingSubtask = subtasks.find(
+          (subtask) =>
+            subtask.kpiId === activeKpi?.id &&
+            subtask.name.trim().toLowerCase() === suggestion.activityName?.trim().toLowerCase()
+        );
+
+        if (!existingSubtask) {
+          const libraryActivity = suggestion.activityLibraryId
+            ? lifeLibraryActivities.find((activity) => activity.id === suggestion.activityLibraryId)
+            : undefined;
+
+          addSubtask({
+            kpiId: activeKpi.id,
+            name: suggestion.activityName,
+            frequency: libraryActivity?.defaultFrequency ?? suggestion.frequency,
+            targetCount: suggestion.targetCount ?? libraryActivity?.targetCount ?? 1,
+          });
+        }
+      }
+    },
+    [addCategory, addKPI, addSubtask, categories, kpis, subtasks]
+  );
+
+  const handleDismissSuggestion = useCallback(
+    (suggestion: LifeBuddySuggestion) => {
+      const dismissUntil = new Date();
+      dismissUntil.setDate(dismissUntil.getDate() + 30);
+      dismissSuggestionUntil(suggestion.id, dismissUntil.toISOString());
+    },
+    [dismissSuggestionUntil]
+  );
+
+  const handleToggleResponsibility = useCallback(
+    (item: ResponsibilityItem) => {
+      toggleSubtaskLog(item.subtaskId, today);
+    },
+    [today, toggleSubtaskLog]
+  );
+
   const suggestedActions = useMemo<SuggestedActionItem[]>(() => {
     const suggestions: SuggestedActionItem[] = [];
 
@@ -1099,9 +1214,23 @@ export default function HomeScreen() {
       });
     }
 
+    if (overdueResponsibilities.length > 0) {
+      const responsibility = overdueResponsibilities[0];
+      suggestions.push({
+        id: `suggest-responsibility-${responsibility.subtaskId}`,
+        text: `Catch up on "${responsibility.title}" for ${responsibility.category}. It is overdue by ${responsibility.daysOverdue} day(s).`,
+        action: {
+          actionTargetType: 'category',
+          categoryName: responsibility.category,
+        },
+        buttonLabel: 'Open Category',
+      });
+    }
+
     return suggestions;
   }, [
     overdueRelationshipTodos,
+    overdueResponsibilities,
     pendingKpiEntries,
     pendingSubtasksToday,
     peopleNeedingAttention,
@@ -1179,6 +1308,23 @@ export default function HomeScreen() {
       });
     });
 
+    overdueResponsibilities.forEach((responsibility) => {
+      priorities.push({
+        id: `responsibility-${responsibility.subtaskId}`,
+        title: `Catch up on ${responsibility.title}`,
+        description: `${responsibility.category} responsibility is overdue by ${responsibility.daysOverdue} day(s).`,
+        priority: scoreCategoryRecommendation(
+          responsibility.category,
+          getOverdueUrgencyKey(Math.max(1, responsibility.daysOverdue))
+        ),
+        action: {
+          actionTargetType: 'category',
+          categoryName: responsibility.category,
+        },
+        buttonLabel: 'Open Category',
+      });
+    });
+
     if (weakestCategory) {
       priorities.push({
         id: `weak-category-${weakestCategory.id}`,
@@ -1196,6 +1342,7 @@ export default function HomeScreen() {
     return priorities.sort((a, b) => b.priority - a.priority).slice(0, 5);
   }, [
     overdueRelationshipTodos,
+    overdueResponsibilities,
     pendingKpiEntries,
     pendingSubtasksToday,
     peopleNeedingAttention,
@@ -1640,6 +1787,21 @@ export default function HomeScreen() {
           </ResponsiveGridItem>
 
           <ResponsiveGridItem mobileSpan={1} tabletSpan={6} desktopSpan={4}>
+            <TodaysResponsibilities
+              dueToday={responsibilitySnapshot.dueToday}
+              overdue={responsibilitySnapshot.overdue}
+              completedToday={responsibilitySnapshot.completedToday}
+              onOpenCategory={(categoryName) =>
+                handleActionPress({
+                  actionTargetType: 'category',
+                  categoryName,
+                })
+              }
+              onToggleComplete={handleToggleResponsibility}
+            />
+          </ResponsiveGridItem>
+
+          <ResponsiveGridItem mobileSpan={1} tabletSpan={6} desktopSpan={4}>
             <SectionCard
               style={{
                 backgroundColor: theme.secondaryBackground,
@@ -1947,7 +2109,7 @@ export default function HomeScreen() {
                           {row.name}
                         </Text>
                         <Text style={[styles.compactRowHint, { color: theme.textSecondary }]}>
-                          {row.status.label}
+                          {row.status.label} | Responsibility {row.responsibilityScore}/100
                         </Text>
                       </View>
                       <Text style={[styles.compactScoreValue, { color: row.status.color }]}>
@@ -2048,6 +2210,14 @@ export default function HomeScreen() {
                 </View>
               )}
             </SectionCard>
+          </ResponsiveGridItem>
+
+          <ResponsiveGridItem mobileSpan={1} tabletSpan={6} desktopSpan={4}>
+            <LifeBuddySuggestions
+              suggestions={lifeBuddySuggestions}
+              onActivate={handleActivateSuggestion}
+              onDismiss={handleDismissSuggestion}
+            />
           </ResponsiveGridItem>
 
           <ResponsiveGridItem mobileSpan={1} tabletSpan={6} desktopSpan={5}>

@@ -1,51 +1,54 @@
 import { OnboardingQuestionCard } from '@/components/OnboardingQuestionCard';
 import { useTheme } from '@/context/ThemeContext';
-import { OnboardingAnswers, OnboardingQuestion } from '@/types/onboarding';
+import { OnboardingSelections, OnboardingStep } from '@/types/onboarding';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 interface LifeBuddySetupProps {
-  questions: OnboardingQuestion[];
-  currentQuestionIndex: number;
-  answers: OnboardingAnswers;
-  onChangeAnswer: (questionId: OnboardingQuestion['id'], value: string) => void;
+  steps: OnboardingStep[];
+  currentStepIndex: number;
+  selections: OnboardingSelections;
+  onToggleOption: (stepId: OnboardingStep['id'], optionId: string) => void;
   onBack: () => void;
   onNext: () => void;
   onSkip: () => void;
 }
 
 export function LifeBuddySetup({
-  questions,
-  currentQuestionIndex,
-  answers,
-  onChangeAnswer,
+  steps,
+  currentStepIndex,
+  selections,
+  onToggleOption,
   onBack,
   onNext,
   onSkip,
 }: LifeBuddySetupProps) {
   const { theme } = useTheme();
-  const currentQuestion = questions[currentQuestionIndex];
+  const currentStep = steps[currentStepIndex];
+  const currentSelections = selections[currentStep.id];
+
+  const completedCount = steps.filter((step) => selections[step.id].length > 0).length;
 
   return (
     <View>
       <View style={styles.introBlock}>
-        <Text style={[styles.eyebrow, { color: theme.primary }]}>Life Buddy Setup</Text>
+        <Text style={[styles.eyebrow, { color: theme.primary }]}>Onboarding V2</Text>
         <Text style={[styles.title, { color: theme.textPrimary }]}>
-          Tell Life Buddy about your life and it will draft your starting system.
+          Build your Life KPI system by identifying yourself, not by creating KPIs manually.
         </Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          We&apos;ll ask a handful of focused questions, generate categories, KPIs, activities,
-          relationship trackers, and reminder defaults, then let you edit everything before saving.
+          Choose your roles, relationships, assets, interests, and priorities. Life Buddy will turn
+          those selections into categories, KPIs, activities, and relationship trackers.
         </Text>
       </View>
 
       <View style={styles.progressDotsRow}>
-        {questions.map((question, index) => {
-          const isComplete = answers[question.id].trim().length > 0;
-          const isActive = index === currentQuestionIndex;
+        {steps.map((step, index) => {
+          const isComplete = selections[step.id].length > 0;
+          const isActive = index === currentStepIndex;
           return (
             <View
-              key={question.id}
+              key={step.id}
               style={[
                 styles.progressDot,
                 {
@@ -62,17 +65,21 @@ export function LifeBuddySetup({
         })}
       </View>
 
+      <Text style={[styles.statusText, { color: theme.textMuted }]}>
+        {completedCount} of {steps.length} steps selected so far.
+      </Text>
+
       <OnboardingQuestionCard
-        question={currentQuestion}
-        answer={answers[currentQuestion.id]}
-        questionNumber={currentQuestionIndex + 1}
-        totalQuestions={questions.length}
-        onChangeAnswer={(value) => onChangeAnswer(currentQuestion.id, value)}
+        step={currentStep}
+        selectedOptionIds={currentSelections}
+        stepNumber={currentStepIndex + 1}
+        totalSteps={steps.length}
+        onToggleOption={(optionId) => onToggleOption(currentStep.id, optionId)}
         onBack={onBack}
         onNext={onNext}
         onSkip={onSkip}
-        isFirst={currentQuestionIndex === 0}
-        isLast={currentQuestionIndex === questions.length - 1}
+        isFirst={currentStepIndex === 0}
+        isLast={currentStepIndex === steps.length - 1}
       />
     </View>
   );
@@ -101,10 +108,15 @@ const styles = StyleSheet.create({
   progressDotsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   progressDot: {
     flex: 1,
     height: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 14,
   },
 });

@@ -1,3 +1,4 @@
+import { GlobalSearchButton } from '@/components/GlobalSearchModal';
 import { useTheme } from '@/context/ThemeContext';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -93,12 +94,15 @@ export function DesktopShell({ children, title }: DesktopShellProps) {
           style={{
             height: 68,
             backgroundColor: theme.secondaryBackground,
-            justifyContent: 'center',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexDirection: 'row',
             paddingHorizontal: theme.spacing.lg,
             borderBottomWidth: 1,
             borderBottomColor: theme.cardBorder,
           }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: theme.textPrimary }}>{title}</Text>
+          <GlobalSearchButton compact />
         </View>
         <View style={{ flex: 1, backgroundColor: theme.background, paddingTop: theme.spacing.md }}>
           {children}

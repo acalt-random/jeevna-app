@@ -1,4 +1,6 @@
+import { GlobalSearchButton } from '@/components/GlobalSearchModal';
 import { useTheme } from '@/context/ThemeContext';
+import { useDeviceType } from '@/hooks/useDeviceType';
 import React from 'react';
 import { Text, View } from 'react-native';
 
@@ -7,10 +9,19 @@ interface PageHeaderProps {
   subtitle?: string;
   style?: any;
   rightAccessory?: React.ReactNode;
+  showSearch?: boolean;
 }
 
-export function PageHeader({ title, subtitle, style, rightAccessory }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  subtitle,
+  style,
+  rightAccessory,
+  showSearch = true,
+}: PageHeaderProps) {
   const { theme } = useTheme();
+  const deviceType = useDeviceType();
+  const shouldShowSearch = showSearch && deviceType !== 'desktop';
 
   return (
     <View style={[{ marginBottom: theme.spacing.xl, paddingTop: 8 }, style]}>
@@ -32,7 +43,10 @@ export function PageHeader({ title, subtitle, style, rightAccessory }: PageHeade
             {title}
           </Text>
         </View>
-        {rightAccessory ? <View>{rightAccessory}</View> : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+          {shouldShowSearch ? <GlobalSearchButton /> : null}
+          {rightAccessory ? <View>{rightAccessory}</View> : null}
+        </View>
       </View>
       {subtitle ? (
         <Text

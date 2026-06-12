@@ -419,7 +419,7 @@ export function GeneratedSetupPreview({
   return (
     <View style={styles.container}>
       <SectionCard>
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Suggested Setup</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Generated Setup</Text>
         <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
           Review everything before saving. You can edit categories, KPIs, activities, relationships,
           and reminder defaults.
@@ -438,7 +438,9 @@ export function GeneratedSetupPreview({
       <SectionCard>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Categories and KPIs</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+              Generated Categories, KPIs, and Activities
+            </Text>
             <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
               This becomes your main tracking structure.
             </Text>

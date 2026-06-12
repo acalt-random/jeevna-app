@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { KPI, PEOPLE_GROUPS, Person, useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
+import { buildResponsibilitySnapshot } from '@/services/responsibilityEngine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -43,7 +44,7 @@ function formatDisplayDate(value: string): string {
 }
 
 export default function CategoryDetailScreen() {
-  const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, personTodos, addPersonTodo, updatePersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
+  const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, addPersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -111,18 +112,6 @@ export default function CategoryDetailScreen() {
     setPersonNotes('');
     setPersonLastContact(todayYMD());
     setShowAddPersonModal(false);
-  };
-
-  const handleImportContact = (contact: SelectedContact) => {
-    setShowContactPicker(false);
-    addPerson({
-      name: contact.name,
-      relationshipType: 'Friend',
-      groupName: 'Other',
-      phone: contact.phoneNumber || undefined,
-      notes: `Email: ${contact.email || 'N/A'}`,
-      lastContactDate: todayYMD(),
-    });
   };
 
   const handleAddContact = (kpiId: string) => {
@@ -328,6 +317,52 @@ export default function CategoryDetailScreen() {
     return { completed, total, percent };
   }, [categoryKpis, subtasks, subtaskLogs, today]);
 
+  const responsibilitySnapshot = useMemo(
+    () =>
+      buildResponsibilitySnapshot({
+        categories,
+        kpis,
+        subtasks,
+        subtaskLogs,
+        today,
+      }),
+    [categories, kpis, subtasks, subtaskLogs, today]
+  );
+
+  const categoryResponsibility = useMemo(
+    () => {
+      if (!category) {
+        return {
+          categoryId: '',
+          categoryName: categoryName,
+          responsibilityScore: 0,
+          dueToday: 0,
+          overdue: 0,
+          completedToday: 0,
+          totalResponsibilities: 0,
+        };
+      }
+
+      return (
+        responsibilitySnapshot.categoryScores.find((score) => score.categoryName === category.name) ?? {
+          categoryId: category.id,
+          categoryName: category.name,
+          responsibilityScore: 0,
+          dueToday: 0,
+          overdue: 0,
+          completedToday: 0,
+          totalResponsibilities: 0,
+        }
+      );
+    },
+    [category, categoryName, responsibilitySnapshot.categoryScores]
+  );
+
+  const responsibilityBySubtaskId = useMemo(
+    () => new Map(responsibilitySnapshot.all.map((item) => [item.subtaskId, item])),
+    [responsibilitySnapshot.all]
+  );
+
   const status = statusForScore(categoryScore);
 
   if (!categoryName || !category) {
@@ -372,6 +407,12 @@ export default function CategoryDetailScreen() {
             <Text style={[styles.detailLine, { color: theme.textSecondary }]}>Tracked days: {entries.length}</Text>
             <Text style={[styles.detailLine, { color: theme.textSecondary }]}>KPIs in category: {categoryKpis.length}</Text>
             <Text style={[styles.detailLine, { color: theme.textSecondary }]}>To-dos completed today: {categoryTodoProgress.completed} / {categoryTodoProgress.total} ({categoryTodoProgress.percent}%)</Text>
+            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+              Responsibility score: {categoryResponsibility.responsibilityScore}/100
+            </Text>
+            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+              Due today: {categoryResponsibility.dueToday} | Overdue: {categoryResponsibility.overdue} | Completed today: {categoryResponsibility.completedToday}
+            </Text>
           </View>
 
           {isRelationshipsCategory && (
@@ -592,6 +633,15 @@ export default function CategoryDetailScreen() {
                         const isCompleted = subtaskLogs.some(
                           (log) => log.subtaskId === subtask.id && log.date === today && log.completed
                         );
+                        const responsibility = responsibilityBySubtaskId.get(subtask.id);
+                        const statusColor =
+                          responsibility?.status === 'Completed'
+                            ? theme.success
+                            : responsibility?.status === 'Rescheduled'
+                              ? theme.warning
+                              : responsibility?.status === 'Missed'
+                                ? theme.danger
+                                : theme.textSecondary;
                         return (
                           <View key={subtask.id} style={styles.subtaskRow}>
                             <TouchableOpacity
@@ -604,7 +654,19 @@ export default function CategoryDetailScreen() {
                               <Text style={[styles.subtaskText, isCompleted && styles.completedText]}>
                                 {subtask.name}
                               </Text>
-                              <Text style={styles.subtaskHint}>{subtask.frequency}, target {subtask.targetCount}</Text>
+                              <Text style={styles.subtaskHint}>
+                                {subtask.frequency}, target {subtask.targetCount}
+                              </Text>
+                              {responsibility ? (
+                                <Text style={[styles.subtaskHint, { color: statusColor }]}>
+                                  {responsibility.status}
+                                  {responsibility.isOverdue
+                                    ? ` · overdue ${responsibility.daysOverdue} day(s)`
+                                    : responsibility.dueDate
+                                      ? ` · due ${responsibility.dueDate}`
+                                      : ''}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
                         );

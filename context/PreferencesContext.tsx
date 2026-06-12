@@ -4,6 +4,8 @@ import React, { createContext, ReactNode, useContext, useEffect, useMemo, useSta
 export const LIFE_BUDDY_SCORING_PREFERENCES_KEY = 'lifeKpi_lifeBuddyScoringPreferences';
 export const ONBOARDING_COMPLETED_KEY = 'lifeKpi_onboardingCompleted';
 export const REMINDER_PREFERENCES_KEY = 'lifeKpi_reminderPreferences';
+export const ONBOARDING_PROFILE_KEY = 'lifeKpi_onboardingProfile';
+export const SUGGESTION_DISMISSALS_KEY = 'lifeKpi_suggestionDismissals';
 
 export type ScoringSection =
   | 'categoryImportance'
@@ -17,6 +19,14 @@ export interface ReminderPreferences {
   kpiReminders: boolean;
   relationshipReminders: boolean;
   weeklyReview: boolean;
+}
+
+export interface OnboardingProfile {
+  roles: string[];
+  relationships: string[];
+  assets: string[];
+  interests: string[];
+  priorities: string[];
 }
 
 export interface LifeBuddyScoringPreferences {
@@ -109,8 +119,12 @@ interface PreferencesContextValue {
   preferencesHydrated: boolean;
   onboardingCompleted: boolean;
   reminderPreferences: ReminderPreferences;
+  onboardingProfile: OnboardingProfile;
+  suggestionDismissedUntil: Record<string, string>;
   lifeBuddyScoringPreferences: LifeBuddyScoringPreferences;
   setOnboardingCompleted: (value: boolean) => void;
+  setOnboardingProfile: (profile: OnboardingProfile) => void;
+  dismissSuggestionUntil: (suggestionId: string, untilDate: string) => void;
   updateReminderPreference: (key: keyof ReminderPreferences, value: boolean) => void;
   resetReminderPreferences: () => void;
   updateLifeBuddyScoringPreference: (
@@ -123,12 +137,23 @@ interface PreferencesContextValue {
 
 const PreferencesContext = createContext<PreferencesContextValue | undefined>(undefined);
 
+const defaultOnboardingProfile: OnboardingProfile = {
+  roles: [],
+  relationships: [],
+  assets: [],
+  interests: [],
+  priorities: [],
+};
+
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [lifeBuddyScoringPreferences, setLifeBuddyScoringPreferences] =
     useState<LifeBuddyScoringPreferences>(defaultLifeBuddyScoringPreferences);
   const [reminderPreferences, setReminderPreferences] =
     useState<ReminderPreferences>(defaultReminderPreferences);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingProfile, setOnboardingProfile] =
+    useState<OnboardingProfile>(defaultOnboardingProfile);
+  const [suggestionDismissedUntil, setSuggestionDismissedUntil] = useState<Record<string, string>>({});
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -152,6 +177,25 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         const savedOnboardingCompleted = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         if (savedOnboardingCompleted !== null) {
           setOnboardingCompleted(savedOnboardingCompleted === 'true');
+        }
+
+        const savedOnboardingProfile = await AsyncStorage.getItem(ONBOARDING_PROFILE_KEY);
+        if (savedOnboardingProfile) {
+          const parsed = JSON.parse(savedOnboardingProfile) as Partial<OnboardingProfile>;
+          setOnboardingProfile({
+            ...defaultOnboardingProfile,
+            ...parsed,
+            roles: parsed.roles ?? [],
+            relationships: parsed.relationships ?? [],
+            assets: parsed.assets ?? [],
+            interests: parsed.interests ?? [],
+            priorities: parsed.priorities ?? [],
+          });
+        }
+
+        const savedDismissals = await AsyncStorage.getItem(SUGGESTION_DISMISSALS_KEY);
+        if (savedDismissals) {
+          setSuggestionDismissedUntil(JSON.parse(savedDismissals) as Record<string, string>);
         }
       } catch (error) {
         console.error('Error loading Life Buddy scoring preferences', error);
@@ -195,13 +239,43 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     );
   }, [isHydrated, onboardingCompleted]);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(ONBOARDING_PROFILE_KEY, JSON.stringify(onboardingProfile)).catch(
+      (error) => {
+        console.error('Error saving onboarding profile', error);
+      }
+    );
+  }, [isHydrated, onboardingProfile]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(
+      SUGGESTION_DISMISSALS_KEY,
+      JSON.stringify(suggestionDismissedUntil)
+    ).catch((error) => {
+      console.error('Error saving suggestion dismissals', error);
+    });
+  }, [isHydrated, suggestionDismissedUntil]);
+
   const value = useMemo<PreferencesContextValue>(() => {
     return {
       preferencesHydrated: isHydrated,
       onboardingCompleted,
       reminderPreferences,
+      onboardingProfile,
+      suggestionDismissedUntil,
       lifeBuddyScoringPreferences,
       setOnboardingCompleted,
+      setOnboardingProfile,
+      dismissSuggestionUntil: (suggestionId, untilDate) => {
+        setSuggestionDismissedUntil((prev) => ({
+          ...prev,
+          [suggestionId]: untilDate,
+        }));
+      },
       updateReminderPreference: (key, value) => {
         setReminderPreferences((prev) => ({
           ...prev,
@@ -224,7 +298,14 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         setLifeBuddyScoringPreferences(defaultLifeBuddyScoringPreferences);
       },
     };
-  }, [isHydrated, lifeBuddyScoringPreferences, onboardingCompleted, reminderPreferences]);
+  }, [
+    isHydrated,
+    lifeBuddyScoringPreferences,
+    onboardingCompleted,
+    onboardingProfile,
+    reminderPreferences,
+    suggestionDismissedUntil,
+  ]);
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
