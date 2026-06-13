@@ -3,35 +3,58 @@ import { LifeLibraryActivityTemplate } from '@/types/onboarding';
 function activity(
   id: string,
   kpiId: string,
-  name: string,
-  frequency: LifeLibraryActivityTemplate['frequency'],
-  targetCount: number,
-  importanceScore: number,
-  recommended = true,
-  defaultFrequency = frequency
+  nameOrFrequency: string,
+  frequencyOrTargetCount: LifeLibraryActivityTemplate['frequency'] | number,
+  targetCountOrImportanceScore?: number,
+  importanceScoreOrRecommended?: number | boolean,
+  recommendedOrDefaultFrequency: boolean | LifeLibraryActivityTemplate['frequency'] = true,
+  defaultFrequency?: LifeLibraryActivityTemplate['frequency']
 ): LifeLibraryActivityTemplate {
+  const usesCompactSignature = typeof frequencyOrTargetCount === 'string';
+  const frequency = usesCompactSignature
+    ? frequencyOrTargetCount
+    : (nameOrFrequency as LifeLibraryActivityTemplate['frequency']);
+  const targetCount = usesCompactSignature
+    ? (targetCountOrImportanceScore ?? 1)
+    : frequencyOrTargetCount;
+  const importanceScore = usesCompactSignature
+    ? ((importanceScoreOrRecommended as number | undefined) ?? 5)
+    : (targetCountOrImportanceScore ?? 5);
+  const recommended = usesCompactSignature
+    ? typeof recommendedOrDefaultFrequency === 'boolean'
+      ? recommendedOrDefaultFrequency
+      : true
+    : typeof importanceScoreOrRecommended === 'boolean'
+      ? importanceScoreOrRecommended
+      : true;
+  const resolvedDefaultFrequency =
+    defaultFrequency ??
+    (typeof recommendedOrDefaultFrequency === 'string'
+      ? recommendedOrDefaultFrequency
+      : frequency);
+
   return {
     id,
     kpiId,
-    name,
+    nameKey: `library.activities.${id}.name`,
     frequency,
     targetCount,
     importanceScore,
     recommended,
-    defaultFrequency,
+    defaultFrequency: resolvedDefaultFrequency,
   };
 }
 
 export const lifeLibraryActivities: LifeLibraryActivityTemplate[] = [
-  activity('activity-sleep-same-bedtime', 'health-sleep-rhythm', 'Keep a Consistent Bedtime', 'daily', 1, 9),
-  activity('activity-sleep-night-review', 'health-sleep-rhythm', 'Review Sleep Quality', 'daily', 1, 7),
-  activity('activity-recovery-hydrate', 'health-recovery-check', 'Hydration Check', 'daily', 1, 7),
-  activity('activity-recovery-rest', 'health-recovery-check', 'Recovery Pause', 'daily', 1, 6),
+  activity('activity-sleep-same-bedtime', 'health-sleep-rhythm', 'daily', 1, 9),
+  activity('activity-sleep-night-review', 'health-sleep-rhythm', 'daily', 1, 7),
+  activity('activity-recovery-hydrate', 'health-recovery-check', 'daily', 1, 7),
+  activity('activity-recovery-rest', 'health-recovery-check', 'daily', 1, 6),
 
-  activity('activity-fitness-gym', 'fitness-workout-consistency', 'Gym Workout', 'weekly', 4, 10),
-  activity('activity-fitness-cardio', 'fitness-workout-consistency', 'Cardio Session', 'weekly', 2, 7),
-  activity('activity-mobility-stretch', 'fitness-mobility-consistency', 'Stretching Session', 'daily', 1, 7),
-  activity('activity-mobility-walk', 'fitness-mobility-consistency', 'Walk or Light Mobility', 'daily', 1, 8),
+  activity('activity-fitness-gym', 'fitness-workout-consistency', 'weekly', 4, 10),
+  activity('activity-fitness-cardio', 'fitness-workout-consistency', 'weekly', 2, 7),
+  activity('activity-mobility-stretch', 'fitness-mobility-consistency', 'daily', 1, 7),
+  activity('activity-mobility-walk', 'fitness-mobility-consistency', 'daily', 1, 8),
 
   activity('activity-finance-expense-review', 'finance-budget-review', 'Review Expenses', 'weekly', 1, 9),
   activity('activity-finance-budget-adjust', 'finance-budget-review', 'Adjust Weekly Budget', 'weekly', 1, 7),

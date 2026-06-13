@@ -7,6 +7,7 @@ import { createNavigationTheme } from '@/constants/themes';
 import { AppDataProvider } from '@/context/AppDataContext';
 import { PreferencesProvider } from '@/context/PreferencesContext';
 import { AppThemeProvider, useTheme } from '@/context/ThemeContext';
+import '@/src/localization/i18n';
 
 export const unstable_settings = {
   anchor: '(tabs)',

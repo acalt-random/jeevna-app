@@ -86,7 +86,7 @@ export function DesktopShell({ children, title }: DesktopShellProps) {
         <TouchableOpacity
           style={navItemStyle(theme)}
           onPress={() => navigateTo('/(tabs)/templates')}>
-          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Templates</Text>
+          <Text style={{ fontSize: 16, color: theme.textSecondary }}>Life Library Packs</Text>
         </TouchableOpacity>
       </View>
       <View style={{ flex: 1, flexDirection: 'column' }}>

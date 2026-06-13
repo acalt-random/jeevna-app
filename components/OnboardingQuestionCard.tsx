@@ -1,17 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { OnboardingOption, OnboardingStep } from '@/types/onboarding';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-  Animated,
-  Easing,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -28,125 +26,194 @@ interface OnboardingQuestionCardProps {
   isLast: boolean;
 }
 
-type TooltipOverlayState = {
-  option: OnboardingOption;
-  anchor: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function getOptionLabel(option: OnboardingOption): string {
+  return option.label ?? option.labelKey ?? option.id;
 }
 
-function OptionChip({
+function getOptionDescription(option: OnboardingOption): string | undefined {
+  return option.description ?? option.descriptionKey;
+}
+
+function InfoButton({
+  onPress,
+  color,
+}: {
+  onPress: () => void;
+  color: string;
+}) {
+  return (
+    <Pressable
+      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+      onPress={(event) => {
+        event.stopPropagation?.();
+        onPress();
+      }}
+      style={styles.infoButton}>
+      <MaterialIcons name="info-outline" size={16} color={color} />
+    </Pressable>
+  );
+}
+
+function SelectionChip({
   option,
   selected,
-  showMobileInfoIcon,
   onPress,
-  onRequestTooltip,
-  onRequestBottomSheet,
-  onScheduleTooltipHide,
+  onShowInfo,
 }: {
   option: OnboardingOption;
   selected: boolean;
-  showMobileInfoIcon: boolean;
   onPress: () => void;
-  onRequestTooltip: (option: OnboardingOption, target: View | null) => void;
-  onRequestBottomSheet: (option: OnboardingOption) => void;
-  onScheduleTooltipHide: () => void;
+  onShowInfo: () => void;
 }) {
   const { theme } = useTheme();
-  const scaleAnim = useRef(new Animated.Value(selected ? 1 : 0.98)).current;
-  const opacityAnim = useRef(new Animated.Value(selected ? 1 : 0.92)).current;
-  const chipRef = useRef<View>(null);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(scaleAnim, {
-        toValue: selected ? 1 : 0.98,
-        duration: 160,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: selected ? 1 : 0.92,
-        duration: 160,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [opacityAnim, scaleAnim, selected]);
-
-  const openTooltip = () => onRequestTooltip(option, chipRef.current);
+  const label = getOptionLabel(option);
+  const description = getOptionDescription(option);
 
   return (
-    <View ref={chipRef} collapsable={false} style={styles.chipOuter}>
-      <Animated.View
+    <Pressable
+      onPress={onPress}
+      onLongPress={() => {
+        if (description) {
+          onShowInfo();
+        }
+      }}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: selected ? theme.secondaryBackground : theme.cardBackground,
+          borderColor: selected ? theme.accent : theme.cardBorder,
+          shadowColor: theme.shadowColor,
+          shadowOpacity: selected ? 0.18 : 0.08,
+          shadowRadius: selected ? 14 : theme.shadowRadius,
+          shadowOffset: { width: 0, height: selected ? 8 : 4 },
+          elevation: selected ? theme.elevation + 1 : theme.elevation,
+        },
+      ]}>
+      {option.icon ? (
+        <MaterialIcons
+          name={option.icon as never}
+          size={18}
+          color={selected ? theme.accent : theme.textSecondary}
+        />
+      ) : null}
+      <Text style={[styles.chipLabel, { color: selected ? theme.textPrimary : theme.textSecondary }]}>
+        {label}
+      </Text>
+      {description ? <InfoButton onPress={onShowInfo} color={theme.textMuted} /> : null}
+    </Pressable>
+  );
+}
+
+function ListRow({
+  option,
+  selected,
+  onPress,
+  onShowInfo,
+}: {
+  option: OnboardingOption;
+  selected: boolean;
+  onPress: () => void;
+  onShowInfo: () => void;
+}) {
+  const { theme } = useTheme();
+  const title = getOptionLabel(option);
+  const description = getOptionDescription(option);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={() => {
+        if (description) {
+          onShowInfo();
+        }
+      }}
+      style={[
+        styles.listRow,
+        {
+          borderBottomColor: theme.cardBorder,
+          backgroundColor: selected ? theme.secondaryBackground : theme.inputBackground,
+        },
+      ]}>
+      <View
         style={[
-          styles.animatedChipWrap,
+          styles.radio,
           {
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
+            borderColor: selected ? theme.accent : theme.cardBorder,
+            backgroundColor: selected ? theme.accent : 'transparent',
           },
         ]}>
-        <Pressable
-          onPress={onPress}
-          onLongPress={() => {
-            if (Platform.OS !== 'web' && option.description) {
-              onRequestBottomSheet(option);
-            }
-          }}
-          onHoverIn={Platform.OS === 'web' && option.description ? openTooltip : undefined}
-          onHoverOut={Platform.OS === 'web' && option.description ? onScheduleTooltipHide : undefined}
-          style={[
-            styles.optionChip,
-            {
-              backgroundColor: selected ? theme.secondaryBackground : theme.cardBackground,
-              borderColor: selected ? theme.accent : theme.cardBorder,
-              borderRadius: 999,
-              shadowColor: selected ? theme.accent : theme.shadowColor,
-              shadowOpacity: selected ? 0.24 : 0.08,
-              shadowRadius: selected ? 14 : theme.shadowRadius,
-              shadowOffset: { width: 0, height: selected ? 8 : 4 },
-              elevation: selected ? theme.elevation + 2 : theme.elevation,
-            },
-          ]}>
-          {option.icon ? (
-            <MaterialIcons
-              name={option.icon as never}
-              size={18}
-              color={selected ? theme.accent : theme.textSecondary}
-            />
-          ) : null}
-          <Text
-            style={[
-              styles.optionChipLabel,
-              { color: selected ? theme.textPrimary : theme.textSecondary },
-            ]}>
-            {option.label}
-          </Text>
-          {showMobileInfoIcon && option.description ? (
-            <TouchableOpacity
-              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-              onPress={() => onRequestBottomSheet(option)}
-              activeOpacity={0.75}
-              style={[
-                styles.infoButton,
-                {
-                  backgroundColor: theme.buttonSecondary,
-                  borderColor: theme.cardBorder,
-                },
-              ]}>
-              <MaterialIcons name="info-outline" size={14} color={theme.textSecondary} />
-            </TouchableOpacity>
-          ) : null}
-        </Pressable>
-      </Animated.View>
-    </View>
+        {selected ? <MaterialIcons name="check" size={14} color="#ffffff" /> : null}
+      </View>
+
+      <View style={styles.listTextWrap}>
+        <Text style={[styles.listTitle, { color: theme.textPrimary }]}>{title}</Text>
+        {description ? (
+          <Text style={[styles.listSubtitle, { color: theme.textSecondary }]}>{description}</Text>
+        ) : null}
+      </View>
+
+      {description ? <InfoButton onPress={onShowInfo} color={theme.textMuted} /> : null}
+    </Pressable>
+  );
+}
+
+function LifeStageCard({
+  option,
+  selected,
+  onPress,
+  onShowInfo,
+}: {
+  option: OnboardingOption;
+  selected: boolean;
+  onPress: () => void;
+  onShowInfo: () => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onShowInfo}
+      style={[
+        styles.lifeStageCard,
+        {
+          backgroundColor: selected ? theme.secondaryBackground : theme.cardBackground,
+          borderColor: selected ? theme.accent : theme.cardBorder,
+          shadowColor: theme.shadowColor,
+          shadowOpacity: selected ? 0.18 : theme.shadowOpacity,
+          shadowRadius: selected ? 16 : theme.shadowRadius,
+          shadowOffset: { width: 0, height: selected ? 10 : 6 },
+          elevation: selected ? theme.elevation + 2 : theme.elevation,
+        },
+      ]}>
+      <View
+        style={[
+          styles.lifeStageIconWrap,
+          {
+            backgroundColor: theme.inputBackground,
+            borderColor: selected ? `${theme.accent}55` : theme.cardBorder,
+          },
+        ]}>
+        <MaterialIcons
+          name={(option.icon || 'auto-awesome') as never}
+          size={22}
+          color={selected ? theme.accent : theme.primary}
+        />
+      </View>
+      <View style={styles.lifeStageTextWrap}>
+        <Text style={[styles.lifeStageTitle, { color: theme.textPrimary }]}>
+          {getOptionLabel(option)}
+        </Text>
+        <Text style={[styles.lifeStageDescription, { color: theme.textSecondary }]}>
+          {getOptionDescription(option)}
+        </Text>
+      </View>
+      <MaterialIcons
+        name={selected ? 'check-circle' : 'radio-button-unchecked'}
+        size={22}
+        color={selected ? theme.accent : theme.textMuted}
+      />
+    </Pressable>
   );
 }
 
@@ -163,79 +230,62 @@ export function OnboardingQuestionCard({
   isLast,
 }: OnboardingQuestionCardProps) {
   const { theme } = useTheme();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const [tooltipState, setTooltipState] = useState<TooltipOverlayState | null>(null);
-  const [tooltipHeight, setTooltipHeight] = useState(88);
+  const { t } = useTranslation();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showMoreLanguages, setShowMoreLanguages] = useState(false);
+  const [showMoreRegions, setShowMoreRegions] = useState(false);
   const [sheetOption, setSheetOption] = useState<OnboardingOption | null>(null);
-  const hideTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isRolesStep = step.id === 'roles';
-  const showMobileInfoIcon = Platform.OS !== 'web';
+  useEffect(() => {
+    setSearchQuery('');
+    setShowMoreLanguages(false);
+    setShowMoreRegions(false);
+  }, [step.id]);
 
-  const roleGroups = useMemo(() => {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const isLanguageStep = step.id === 'language';
+  const isRegionStep = step.id === 'region';
+  const isLifeStageStep = step.id === 'lifeStages';
+  const showSelectedCount = !step.singleSelect && !isLanguageStep && !isRegionStep;
+
+  const filteredOptions = useMemo(() => {
+    const baseOptions = step.options.filter((option) => {
+      if (!normalizedQuery) return true;
+
+      return [
+        getOptionLabel(option),
+        getOptionDescription(option) ?? '',
+        option.groupLabel ?? '',
+        option.searchText ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+
+    if (isLanguageStep && !showMoreLanguages) {
+      return baseOptions.filter((option) => option.groupLabel === 'Top Languages');
+    }
+
+    if (isRegionStep && !showMoreRegions) {
+      return baseOptions.filter((option) => option.groupLabel === 'Recommended Regions');
+    }
+
+    return baseOptions;
+  }, [isLanguageStep, isRegionStep, normalizedQuery, showMoreLanguages, showMoreRegions, step.options]);
+
+  const groupedOptions = useMemo(() => {
     const groups = new Map<string, OnboardingOption[]>();
 
-    for (const option of step.options) {
-      const groupName = option.group ?? 'Other';
+    for (const option of filteredOptions) {
+      const groupName = option.groupLabel ?? 'Options';
       const current = groups.get(groupName) ?? [];
       current.push(option);
       groups.set(groupName, current);
     }
 
     return [...groups.entries()];
-  }, [step.options]);
-
-  const clearHideTooltipTimer = () => {
-    if (hideTooltipTimerRef.current) {
-      clearTimeout(hideTooltipTimerRef.current);
-      hideTooltipTimerRef.current = null;
-    }
-  };
-
-  const closeTooltip = () => {
-    clearHideTooltipTimer();
-    setTooltipState(null);
-  };
-
-  const scheduleTooltipHide = () => {
-    clearHideTooltipTimer();
-    hideTooltipTimerRef.current = setTimeout(() => {
-      setTooltipState(null);
-    }, 120);
-  };
-
-  const openTooltip = (option: OnboardingOption, target: View | null) => {
-    if (Platform.OS !== 'web' || !option.description || !target) return;
-
-    clearHideTooltipTimer();
-    target.measureInWindow((x, y, width, height) => {
-      setTooltipState({
-        option,
-        anchor: { x, y, width, height },
-      });
-    });
-  };
-
-  const tooltipWidth = clamp(Math.round(screenWidth * 0.24), 220, 320);
-  const tooltipLeft = tooltipState
-    ? clamp(
-        tooltipState.anchor.x + tooltipState.anchor.width / 2 - tooltipWidth / 2,
-        12,
-        Math.max(12, screenWidth - tooltipWidth - 12)
-      )
-    : 12;
-  const shouldPlaceBelow = tooltipState
-    ? tooltipState.anchor.y < tooltipHeight + 24 ||
-      tooltipState.anchor.y + tooltipState.anchor.height + 16 + tooltipHeight > screenHeight
-    : false;
-  const tooltipTop = tooltipState
-    ? shouldPlaceBelow
-      ? Math.min(
-          screenHeight - tooltipHeight - 16,
-          tooltipState.anchor.y + tooltipState.anchor.height + 10
-        )
-      : Math.max(16, tooltipState.anchor.y - tooltipHeight - 10)
-    : 16;
+  }, [filteredOptions]);
 
   return (
     <>
@@ -245,75 +295,166 @@ export function OnboardingQuestionCard({
           {
             backgroundColor: theme.cardBackground,
             borderColor: theme.cardBorder,
-            borderRadius: theme.borderRadius.lg,
+            borderRadius: theme.borderRadius.xl,
           },
         ]}>
         <View style={styles.progressRow}>
           <Text style={[styles.progressText, { color: theme.primary }]}>
-            Step {stepNumber} of {totalSteps}
+            {`Step ${stepNumber} of ${totalSteps}`}
           </Text>
           <TouchableOpacity onPress={onSkip} activeOpacity={0.8}>
-            <Text style={[styles.skipText, { color: theme.textSecondary }]}>Skip for now</Text>
+            <Text style={[styles.skipText, { color: theme.textSecondary }]}>
+              {t('common.skipForNow')}
+            </Text>
           </TouchableOpacity>
         </View>
 
         <Text style={[styles.title, { color: theme.textPrimary }]}>{step.title}</Text>
-        <Text style={[styles.prompt, { color: theme.textSecondary }]}>{step.subtitle}</Text>
+        {step.subtitle ? (
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{step.subtitle}</Text>
+        ) : null}
         {step.helperText ? (
           <Text style={[styles.helper, { color: theme.textMuted }]}>{step.helperText}</Text>
         ) : null}
 
-        <View
-          style={[
-            styles.selectedCountPill,
-            {
-              backgroundColor: theme.secondaryBackground,
-              borderColor: theme.cardBorder,
-            },
-          ]}>
-          <Text style={[styles.selectedCountText, { color: theme.textPrimary }]}>
-            {selectedOptionIds.length} selected
-          </Text>
-        </View>
+        {showSelectedCount ? (
+          <View
+            style={[
+              styles.selectedCountPill,
+              {
+                backgroundColor: theme.secondaryBackground,
+                borderColor: theme.cardBorder,
+              },
+            ]}>
+            <Text style={[styles.selectedCountText, { color: theme.textPrimary }]}>
+              {step.maxSelections
+                ? `${selectedOptionIds.length} of ${step.maxSelections} selected`
+                : `${selectedOptionIds.length} selected`}
+            </Text>
+          </View>
+        ) : null}
 
-        {isRolesStep ? (
-          <View style={styles.groupedSections}>
-            {roleGroups.map(([groupName, options]) => (
+        {(isLanguageStep ? showMoreLanguages : isRegionStep ? showMoreRegions : false) ? (
+          <View
+            style={[
+              styles.searchWrap,
+              {
+                backgroundColor: theme.inputBackground,
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+              },
+            ]}>
+            <MaterialIcons name="search" size={18} color={theme.textMuted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={isLanguageStep ? 'Search languages' : 'Search regions'}
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.textPrimary }]}
+            />
+          </View>
+        ) : null}
+
+        {isLifeStageStep ? (
+          <View style={styles.lifeStageList}>
+            {filteredOptions.map((option) => (
+              <LifeStageCard
+                key={option.id}
+                option={option}
+                selected={selectedOptionIds.includes(option.id)}
+                onPress={() => onToggleOption(option.id)}
+                onShowInfo={() => setSheetOption(option)}
+              />
+            ))}
+          </View>
+        ) : isLanguageStep || isRegionStep ? (
+          <View style={styles.pickerSections}>
+            {groupedOptions.map(([groupName, options]) => (
               <View key={groupName} style={styles.groupSection}>
                 <Text style={[styles.groupHeading, { color: theme.textPrimary }]}>{groupName}</Text>
+                <View
+                  style={[
+                    styles.listWrap,
+                    {
+                      borderColor: theme.cardBorder,
+                      backgroundColor: theme.inputBackground,
+                    },
+                  ]}>
+                  {options.map((option, index) => (
+                    <View key={option.id}>
+                      <ListRow
+                        option={option}
+                        selected={selectedOptionIds.includes(option.id)}
+                        onPress={() => onToggleOption(option.id)}
+                        onShowInfo={() => setSheetOption(option)}
+                      />
+                      {index === options.length - 1 ? null : null}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+
+            {isLanguageStep && !showMoreLanguages ? (
+              <TouchableOpacity
+                style={[
+                  styles.moreButton,
+                  {
+                    backgroundColor: theme.buttonSecondary,
+                    borderColor: theme.cardBorder,
+                    borderRadius: theme.borderRadius.md,
+                  },
+                ]}
+                onPress={() => setShowMoreLanguages(true)}
+                activeOpacity={0.85}>
+                <Text style={[styles.moreButtonText, { color: theme.textPrimary }]}>More Languages</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {isRegionStep && !showMoreRegions ? (
+              <TouchableOpacity
+                style={[
+                  styles.moreButton,
+                  {
+                    backgroundColor: theme.buttonSecondary,
+                    borderColor: theme.cardBorder,
+                    borderRadius: theme.borderRadius.md,
+                  },
+                ]}
+                onPress={() => setShowMoreRegions(true)}
+                activeOpacity={0.85}>
+                <Text style={[styles.moreButtonText, { color: theme.textPrimary }]}>More Regions</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.groupedSections}>
+            {groupedOptions.map(([groupName, options]) => (
+              <View key={groupName} style={styles.groupSection}>
+                {groupedOptions.length > 1 ? (
+                  <Text style={[styles.groupHeading, { color: theme.textPrimary }]}>{groupName}</Text>
+                ) : null}
                 <View style={styles.optionGrid}>
                   {options.map((option) => (
-                    <OptionChip
+                    <SelectionChip
                       key={option.id}
                       option={option}
                       selected={selectedOptionIds.includes(option.id)}
-                      showMobileInfoIcon={showMobileInfoIcon}
                       onPress={() => onToggleOption(option.id)}
-                      onRequestTooltip={openTooltip}
-                      onRequestBottomSheet={setSheetOption}
-                      onScheduleTooltipHide={scheduleTooltipHide}
+                      onShowInfo={() => setSheetOption(option)}
                     />
                   ))}
                 </View>
               </View>
             ))}
           </View>
-        ) : (
-          <View style={styles.optionGrid}>
-            {step.options.map((option) => (
-              <OptionChip
-                key={option.id}
-                option={option}
-                selected={selectedOptionIds.includes(option.id)}
-                showMobileInfoIcon={showMobileInfoIcon}
-                onPress={() => onToggleOption(option.id)}
-                onRequestTooltip={openTooltip}
-                onRequestBottomSheet={setSheetOption}
-                onScheduleTooltipHide={scheduleTooltipHide}
-              />
-            ))}
-          </View>
         )}
+
+        {filteredOptions.length === 0 ? (
+          <Text style={[styles.emptyText, { color: theme.textMuted }]}>
+            No matches yet. Try a different keyword.
+          </Text>
+        ) : null}
 
         <View style={styles.footerRow}>
           <TouchableOpacity
@@ -329,7 +470,9 @@ export function OnboardingQuestionCard({
             onPress={onBack}
             disabled={isFirst}
             activeOpacity={0.85}>
-            <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>Back</Text>
+            <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+              {t('common.back')}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -342,54 +485,15 @@ export function OnboardingQuestionCard({
             ]}
             onPress={onNext}
             activeOpacity={0.85}>
-            <Text style={styles.primaryButtonText}>{isLast ? 'Generate Setup' : 'Next'}</Text>
+            <Text style={styles.primaryButtonText}>
+              {isLast ? 'Preview My Setup' : t('common.continue')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <Modal
-        visible={Platform.OS === 'web' && !!tooltipState}
-        transparent
-        animationType="fade"
-        onRequestClose={closeTooltip}>
-        <Pressable style={styles.overlayRoot} onPress={closeTooltip}>
-          {tooltipState ? (
-            <Pressable
-              onHoverIn={clearHideTooltipTimer}
-              onHoverOut={scheduleTooltipHide}
-              onPress={(event) => event.stopPropagation?.()}
-              style={[
-                styles.tooltipOverlay,
-                {
-                  top: tooltipTop,
-                  left: tooltipLeft,
-                  width: tooltipWidth,
-                  minWidth: 220,
-                  maxWidth: 320,
-                  backgroundColor: theme.cardBackground,
-                  borderColor: theme.cardBorder,
-                  borderRadius: theme.borderRadius.md,
-                },
-              ]}
-              onLayout={(event) => {
-                const nextHeight = event.nativeEvent.layout.height;
-                if (Math.abs(nextHeight - tooltipHeight) > 2) {
-                  setTooltipHeight(nextHeight);
-                }
-              }}>
-              <Text style={[styles.tooltipTitle, { color: theme.textPrimary }]}>
-                {tooltipState.option.label}
-              </Text>
-              <Text style={[styles.tooltipText, { color: theme.textSecondary }]}>
-                {tooltipState.option.description}
-              </Text>
-            </Pressable>
-          ) : null}
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={Platform.OS !== 'web' && !!sheetOption}
+        visible={!!sheetOption}
         transparent
         animationType="slide"
         onRequestClose={() => setSheetOption(null)}>
@@ -417,9 +521,10 @@ export function OnboardingQuestionCard({
                     ]}
                   />
                 </View>
+
                 <View style={styles.sheetHeader}>
                   <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>
-                    {sheetOption.label}
+                    {getOptionLabel(sheetOption)}
                   </Text>
                   <TouchableOpacity
                     onPress={() => setSheetOption(null)}
@@ -431,14 +536,65 @@ export function OnboardingQuestionCard({
                         borderColor: theme.cardBorder,
                       },
                     ]}>
-                    <Text style={[styles.sheetCloseText, { color: theme.textPrimary }]}>
-                      Close
+                    <MaterialIcons name="close" size={18} color={theme.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                {getOptionDescription(sheetOption) ? (
+                  <Text style={[styles.sheetDescription, { color: theme.textSecondary }]}>
+                    {getOptionDescription(sheetOption)}
+                  </Text>
+                ) : null}
+
+                <View style={styles.sheetActionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton,
+                      {
+                        backgroundColor: selectedOptionIds.includes(sheetOption.id)
+                          ? theme.buttonSecondary
+                          : theme.buttonPrimary,
+                        borderRadius: theme.borderRadius.md,
+                        borderWidth: selectedOptionIds.includes(sheetOption.id) ? 1 : 0,
+                        borderColor: theme.cardBorder,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (!selectedOptionIds.includes(sheetOption.id)) {
+                        onToggleOption(sheetOption.id);
+                      }
+                      setSheetOption(null);
+                    }}
+                    activeOpacity={0.85}>
+                    <Text
+                      style={[
+                        styles.primaryButtonText,
+                        {
+                          color: selectedOptionIds.includes(sheetOption.id)
+                            ? theme.textMuted
+                            : '#ffffff',
+                        },
+                      ]}>
+                      {selectedOptionIds.includes(sheetOption.id) ? t('common.selected') : t('common.selectThis')}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={() => setSheetOption(null)}
+                    activeOpacity={0.85}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      {t('common.gotIt')}
                     </Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.sheetDescription, { color: theme.textSecondary }]}>
-                  {sheetOption.description}
-                </Text>
               </>
             ) : null}
           </Pressable>
@@ -451,14 +607,14 @@ export function OnboardingQuestionCard({
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    padding: 18,
+    padding: 20,
   },
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   progressText: {
     fontSize: 12,
@@ -470,11 +626,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '900',
     marginBottom: 8,
   },
-  prompt: {
+  subtitle: {
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 6,
@@ -482,7 +638,7 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   selectedCountPill: {
     alignSelf: 'flex-start',
@@ -496,6 +652,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  searchWrap: {
+    minHeight: 46,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+  },
+  pickerSections: {
+    gap: 14,
+  },
   groupedSections: {
     gap: 18,
   },
@@ -503,116 +675,162 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   groupHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  listWrap: {
+    borderWidth: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  listRow: {
+    minHeight: 72,
+    borderBottomWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  listTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  listSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  moreButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  moreButtonText: {
     fontSize: 14,
     fontWeight: '800',
+  },
+  lifeStageList: {
+    gap: 12,
+  },
+  lifeStageCard: {
+    minHeight: 108,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  lifeStageIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lifeStageTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  lifeStageTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  lifeStageDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   optionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  chipOuter: {
-    maxWidth: '100%',
-  },
-  animatedChipWrap: {
-    maxWidth: '100%',
-  },
-  optionChip: {
+  chip: {
     minHeight: 48,
+    minWidth: 164,
     maxWidth: 320,
-    minWidth: 168,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
+    borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexShrink: 1,
   },
-  optionChipLabel: {
+  chipLabel: {
     fontSize: 13,
     fontWeight: '800',
     flexShrink: 1,
   },
   infoButton: {
     marginLeft: 'auto',
-    width: 22,
-    height: 22,
-    borderWidth: 1,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 18,
-  },
-  secondaryButton: {
-    minHeight: 44,
-    minWidth: 110,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
+    marginTop: 20,
   },
   primaryButton: {
-    minHeight: 44,
-    minWidth: 146,
+    minHeight: 46,
+    minWidth: 150,
+    paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
   },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
+  secondaryButton: {
+    minHeight: 46,
+    minWidth: 110,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '800',
   },
-  overlayRoot: {
-    flex: 1,
-  },
-  tooltipOverlay: {
-    position: 'absolute',
-    zIndex: 9999,
-    elevation: 50,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  tooltipTitle: {
-    fontSize: 13,
+  secondaryButtonText: {
+    fontSize: 14,
     fontWeight: '800',
-    marginBottom: 4,
-  },
-  tooltipText: {
-    fontSize: 13,
-    lineHeight: 19,
-    flexWrap: 'wrap',
   },
   sheetBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   bottomSheet: {
+    maxHeight: '80%',
     borderWidth: 1,
     paddingHorizontal: 18,
-    paddingBottom: 28,
     paddingTop: 8,
-    shadowColor: '#000000',
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 12,
+    paddingBottom: 24,
   },
   sheetHandleWrap: {
     alignItems: 'center',
@@ -635,19 +853,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetCloseButton: {
-    minHeight: 36,
+    width: 36,
+    height: 36,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999,
-  },
-  sheetCloseText: {
-    fontSize: 13,
-    fontWeight: '800',
   },
   sheetDescription: {
     fontSize: 15,
     lineHeight: 22,
+    marginBottom: 18,
+  },
+  sheetActionRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
 });

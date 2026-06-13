@@ -1,13 +1,16 @@
 import { Category, KPI, Subtask, SubtaskFrequency } from '@/context/AppDataContext';
 import { OnboardingProfile } from '@/context/PreferencesContext';
+import i18n from '@/src/localization/i18n';
 import {
   assetOptions,
+  currentFocusOptions,
   interestOptions,
+  lifeStageOptions,
   lifeLibraryActivities,
   lifeLibraryCategories,
   lifeLibraryKpis,
   lifeLibraryRules,
-  priorityOptions,
+  responsibilityOptions,
   relationshipOptions,
   roleOptions,
 } from '@/src/data/lifeLibrary';
@@ -30,28 +33,49 @@ export interface LifeBuddySuggestion {
   categoryId?: string;
 }
 
-type TriggerLabel = {
-  id: string;
-  label: string;
-};
-
 const triggerLabels = new Map<string, string>(
-  [...roleOptions, ...relationshipOptions, ...assetOptions, ...interestOptions, ...priorityOptions].map(
-    (option: TriggerLabel) => [option.id, option.label]
-  )
+  [
+    ...roleOptions,
+    ...lifeStageOptions,
+    ...relationshipOptions,
+    ...responsibilityOptions,
+    ...assetOptions,
+    ...interestOptions,
+    ...currentFocusOptions,
+  ].map((option) => [option.id, option.label ?? option.labelKey ?? fallbackTitle(option.id)])
 );
+
+function getTriggerLabel(triggerId: string): string {
+  const value = triggerLabels.get(triggerId);
+  if (!value) return fallbackTitle(triggerId);
+  if (!value.includes('.')) return value;
+  return i18n.t(value, { defaultValue: fallbackTitle(triggerId) });
+}
 
 const categoryById = new Map(lifeLibraryCategories.map((category) => [category.id, category]));
 const kpiById = new Map(lifeLibraryKpis.map((kpi) => [kpi.id, kpi]));
 
+function fallbackTitle(value: string): string {
+  return value
+    .replace(/^activity-/, '')
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function uniqueTriggers(profile: OnboardingProfile): string[] {
   return Array.from(
     new Set([
+      ...profile.locale,
       ...profile.roles,
+      ...profile.lifeStages,
       ...profile.relationships,
+      ...profile.responsibilities,
       ...profile.assets,
       ...profile.interests,
       ...profile.priorities,
+      ...profile.currentFocus,
     ])
   );
 }
@@ -80,7 +104,8 @@ function categoryMatchesIds(activeCategories: Category[]): Set<string> {
   const ids = new Set<string>();
 
   for (const category of lifeLibraryCategories) {
-    if (keys.has(categoryKey(category.name))) {
+    const categoryName = i18n.t(category.nameKey, { defaultValue: fallbackTitle(category.id) });
+    if (keys.has(categoryKey(categoryName))) {
       ids.add(category.id);
     }
   }
@@ -95,7 +120,9 @@ function activeLibraryKpiIds(activeKpis: KPI[]): Set<string> {
   for (const kpi of lifeLibraryKpis) {
     const category = categoryById.get(kpi.categoryId);
     if (!category) continue;
-    if (activeKeys.has(kpiKey(category.name, kpi.name))) {
+    const categoryName = i18n.t(category.nameKey, { defaultValue: fallbackTitle(category.id) });
+    const kpiName = i18n.t(kpi.nameKey, { defaultValue: fallbackTitle(kpi.id) });
+    if (activeKeys.has(kpiKey(categoryName, kpiName))) {
       ids.add(kpi.id);
     }
   }
@@ -113,8 +140,11 @@ function activeLibraryActivityKeys(activeSubtasks: Subtask[], activeKpis: KPI[])
 
     const libraryKpi = lifeLibraryKpis.find(
       (kpi) =>
-        kpi.name.trim().toLowerCase() === parentKpi.name.trim().toLowerCase() &&
-        categoryById.get(kpi.categoryId)?.name.trim().toLowerCase() ===
+        i18n.t(kpi.nameKey, { defaultValue: fallbackTitle(kpi.id) }).trim().toLowerCase() ===
+          parentKpi.name.trim().toLowerCase() &&
+        i18n.t(categoryById.get(kpi.categoryId)?.nameKey ?? '', {
+          defaultValue: fallbackTitle(kpi.categoryId),
+        }).trim().toLowerCase() ===
           parentKpi.category.trim().toLowerCase()
     );
 
@@ -154,7 +184,7 @@ export function buildLifeBuddySuggestions(params: {
   for (const rule of lifeLibraryRules) {
     if (!triggers.includes(rule.trigger)) continue;
 
-    const reasonLabel = triggerLabels.get(rule.trigger) ?? rule.trigger;
+    const reasonLabel = getTriggerLabel(rule.trigger);
 
     for (const activityId of rule.activities) {
       const activity = lifeLibraryActivities.find((item) => item.id === activityId);
@@ -166,7 +196,10 @@ export function buildLifeBuddySuggestions(params: {
       const category = categoryById.get(kpi.categoryId);
       if (!category) continue;
 
-      if (activeActivityKeys.has(activityKey(kpi.id, activity.name))) continue;
+      const activityName = i18n.t(activity.nameKey, { defaultValue: fallbackTitle(activity.id) });
+      const kpiName = i18n.t(kpi.nameKey, { defaultValue: fallbackTitle(kpi.id) });
+      const categoryName = i18n.t(category.nameKey, { defaultValue: fallbackTitle(category.id) });
+      if (activeActivityKeys.has(activityKey(kpi.id, activityName))) continue;
 
       const suggestionId = `activity:${activity.id}`;
       if (isStillDismissed(suggestionDismissedUntil[suggestionId])) continue;
@@ -179,17 +212,17 @@ export function buildLifeBuddySuggestions(params: {
 
       suggestions.set(suggestionId, {
         id: suggestionId,
-        title: activity.name,
+        title: activityName,
         type: 'activity',
-        category: category.name,
+        category: categoryName,
         reason: sourceTriggers.join(', '),
         sourceTriggers,
         importanceScore: activity.importanceScore,
         frequency: activity.defaultFrequency,
         recommended: activity.recommended,
         kpiId: kpi.id,
-        kpiName: kpi.name,
-        activityName: activity.name,
+        kpiName,
+        activityName,
         activityLibraryId: activity.id,
         targetCount: activity.targetCount,
         categoryId: category.id,
@@ -203,6 +236,8 @@ export function buildLifeBuddySuggestions(params: {
 
       const category = categoryById.get(kpi.categoryId);
       if (!category) continue;
+      const categoryName = i18n.t(category.nameKey, { defaultValue: fallbackTitle(category.id) });
+      const kpiName = i18n.t(kpi.nameKey, { defaultValue: fallbackTitle(kpi.id) });
 
       const suggestionId = `kpi:${kpi.id}`;
       if (isStillDismissed(suggestionDismissedUntil[suggestionId])) continue;
@@ -224,16 +259,16 @@ export function buildLifeBuddySuggestions(params: {
 
       suggestions.set(suggestionId, {
         id: suggestionId,
-        title: kpi.name,
+        title: kpiName,
         type: 'kpi',
-        category: category.name,
+        category: categoryName,
         reason: sourceTriggers.join(', '),
         sourceTriggers,
         importanceScore: topActivity?.importanceScore ?? 5,
         frequency: topActivity?.defaultFrequency ?? kpi.recommendedFrequency,
         recommended: topActivity?.recommended ?? true,
         kpiId: kpi.id,
-        kpiName: kpi.name,
+        kpiName,
         categoryId: category.id,
       });
     }
@@ -243,6 +278,7 @@ export function buildLifeBuddySuggestions(params: {
 
       const category = categoryById.get(categoryId);
       if (!category) continue;
+      const categoryName = i18n.t(category.nameKey, { defaultValue: fallbackTitle(category.id) });
 
       const categoryKpis = lifeLibraryKpis.filter((kpi) => kpi.categoryId === categoryId);
       const candidateKpi = categoryKpis.find((kpi) => !activeKpiIds.has(kpi.id)) ?? categoryKpis[0];
@@ -268,17 +304,22 @@ export function buildLifeBuddySuggestions(params: {
 
       suggestions.set(suggestionId, {
         id: suggestionId,
-        title: topActivity?.name ?? candidateKpi.name,
+        title:
+          topActivity
+            ? i18n.t(topActivity.nameKey, { defaultValue: fallbackTitle(topActivity.id) })
+            : i18n.t(candidateKpi.nameKey, { defaultValue: fallbackTitle(candidateKpi.id) }),
         type: 'activity',
-        category: category.name,
+        category: categoryName,
         reason: sourceTriggers.join(', '),
         sourceTriggers,
         importanceScore: topActivity?.importanceScore ?? 5,
         frequency: topActivity?.defaultFrequency ?? candidateKpi.recommendedFrequency,
         recommended: topActivity?.recommended ?? true,
         kpiId: candidateKpi.id,
-        kpiName: candidateKpi.name,
-        activityName: topActivity?.name,
+        kpiName: i18n.t(candidateKpi.nameKey, { defaultValue: fallbackTitle(candidateKpi.id) }),
+        activityName: topActivity
+          ? i18n.t(topActivity.nameKey, { defaultValue: fallbackTitle(topActivity.id) })
+          : undefined,
         categoryId: category.id,
       });
     }

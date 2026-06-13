@@ -2,34 +2,54 @@ import { ReminderPreferences } from '@/context/PreferencesContext';
 import { SubtaskFrequency } from '@/context/AppDataContext';
 
 export type OnboardingStepId =
+  | 'language'
+  | 'region'
   | 'roles'
+  | 'lifeStages'
   | 'relationships'
+  | 'responsibilities'
   | 'assets'
   | 'interests'
-  | 'priorities';
+  | 'priorities'
+  | 'currentFocus';
 
 export interface OnboardingOption {
   id: string;
-  label: string;
-  description: string;
-  group?: string;
+  labelKey?: string;
+  label?: string;
+  descriptionKey?: string;
+  description?: string;
+  groupKey?: string;
+  groupLabel?: string;
   icon?: string;
+  searchText?: string;
 }
 
 export interface OnboardingStep {
   id: OnboardingStepId;
-  title: string;
-  subtitle: string;
+  titleKey?: string;
+  title?: string;
+  subtitleKey?: string;
+  subtitle?: string;
+  helperTextKey?: string;
   helperText?: string;
   options: OnboardingOption[];
+  singleSelect?: boolean;
+  maxSelections?: number;
 }
 
 export interface OnboardingSelections {
+  locale: string[];
+  language: string[];
+  region: string[];
   roles: string[];
+  lifeStages: string[];
   relationships: string[];
+  responsibilities: string[];
   assets: string[];
   interests: string[];
   priorities: string[];
+  currentFocus: string[];
 }
 
 export interface GeneratedOnboardingActivity {
@@ -81,7 +101,7 @@ export interface GeneratedOnboardingSetup {
 export interface LifeLibraryActivityTemplate {
   id: string;
   kpiId: string;
-  name: string;
+  nameKey: string;
   frequency: SubtaskFrequency;
   targetCount: number;
   importanceScore: number;
@@ -92,7 +112,7 @@ export interface LifeLibraryActivityTemplate {
 export interface LifeLibraryKpiTemplate {
   id: string;
   categoryId: string;
-  name: string;
+  nameKey: string;
   target: number;
   unit: string;
   weight: number;
@@ -101,8 +121,8 @@ export interface LifeLibraryKpiTemplate {
 
 export interface LifeLibraryCategory {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
 }
 
 export interface LifeLibraryRule {
@@ -114,10 +134,10 @@ export interface LifeLibraryRule {
 
 export interface RelationshipTrackerTemplate {
   trigger: string;
-  name: string;
-  relationshipType: string;
-  groupName: string;
+  nameKey: string;
+  relationshipTypeKey: string;
+  groupNameKey: string;
   frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'one-time';
-  todoTitle: string;
-  notes?: string;
+  todoTitleKey: string;
+  notesKey?: string;
 }

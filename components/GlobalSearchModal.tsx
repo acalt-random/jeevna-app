@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { EmptyState } from '@/components/EmptyState';
 import { useAppData } from '@/context/AppDataContext';
+import { usePreferences } from '@/context/PreferencesContext';
 import { useTheme } from '@/context/ThemeContext';
 import {
   groupSearchResults,
@@ -9,7 +10,11 @@ import {
   searchEntities,
   buildSearchIndex,
 } from '@/services/searchEngine';
-import { templatePacks } from '@/src/data/templatePacks';
+import {
+  buildLifeLibraryPackApplyPayload,
+  findLifeLibraryPackById,
+  getAvailableLifeLibraryPacks,
+} from '@/services/lifeLibraryPackService';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -43,7 +48,7 @@ function getGroupLabel(type: SearchEntityType) {
   if (type === 'kpi') return 'KPIs';
   if (type === 'activity') return 'Activities';
   if (type === 'relationship') return 'Relationships';
-  return 'Templates';
+  return 'Life Library Packs';
 }
 
 function SearchResultCard({
@@ -62,11 +67,11 @@ function SearchResultCard({
       ? 'Open Category'
       : result.type === 'kpi'
         ? 'Open KPI'
-        : result.type === 'activity'
+      : result.type === 'activity'
           ? 'Open Activity'
           : result.type === 'relationship'
             ? 'Open Relationship'
-            : 'Activate Template';
+            : 'Activate Pack';
 
   const secondaryLabel = result.type === 'activity' ? 'Complete Activity' : undefined;
 
@@ -152,8 +157,9 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
     subtasks,
     people,
     toggleSubtaskLog,
-    applyTemplatePack,
+    applyLifeLibraryPack,
   } = useAppData();
+  const { localePreferences } = usePreferences();
   const [visible, setVisible] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -164,9 +170,9 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
         kpis,
         subtasks,
         people,
-        templates: templatePacks,
+        packs: getAvailableLifeLibraryPacks(localePreferences),
       }),
-    [categories, kpis, subtasks, people]
+    [categories, kpis, subtasks, people, localePreferences]
   );
 
   const results = useMemo(() => searchEntities(query, searchIndex), [query, searchIndex]);
@@ -223,11 +229,10 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
       return;
     }
 
-    if (result.type === 'template' && result.templateId) {
-      const template = templatePacks.find((item) => item.id === result.templateId);
-      if (template) {
-        const { id, title, blurb, ...payload } = template;
-        applyTemplatePack(payload);
+    if (result.type === 'pack' && result.packId) {
+      const pack = findLifeLibraryPackById(result.packId);
+      if (pack) {
+        applyLifeLibraryPack(buildLifeLibraryPackApplyPayload(pack));
       }
       close();
     }
@@ -240,7 +245,7 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
     }
   };
 
-  const orderedTypes: SearchEntityType[] = ['category', 'kpi', 'activity', 'relationship', 'template'];
+  const orderedTypes: SearchEntityType[] = ['category', 'kpi', 'activity', 'relationship', 'pack'];
 
   return (
     <>
@@ -303,7 +308,7 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search categories, KPIs, activities, relationships, templates..."
+                placeholder="Search categories, KPIs, activities, relationships, packs..."
                 placeholderTextColor={theme.textMuted}
                 autoFocus
                 style={[styles.searchInput, { color: theme.textPrimary }]}
@@ -314,7 +319,7 @@ export function GlobalSearchButton({ compact = false }: { compact?: boolean }) {
               {!query.trim() ? (
                 <EmptyState
                   title="Search everything"
-                  message="Find categories, KPIs, activities, relationships, and templates from one place."
+                  message="Find categories, KPIs, activities, relationships, and packs from one place."
                 />
               ) : results.length === 0 ? (
                 <EmptyState

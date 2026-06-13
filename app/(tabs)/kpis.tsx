@@ -713,8 +713,11 @@ export default function KPIManagerScreen() {
     if (Number.isNaN(targetNum) || Number.isNaN(weightNum)) return;
 
     if (editingId) {
+      const existingKpi = kpis.find((item) => item.id === editingId);
+      if (!existingKpi) return;
+
       updateKPI({
-        id: editingId,
+        ...existingKpi,
         name: kpiName.trim(),
         category: category.trim(),
         target: targetNum,
@@ -732,7 +735,7 @@ export default function KPIManagerScreen() {
     }
 
     clearForm();
-  }, [addKPI, category, clearForm, editingId, kpiName, target, unit, updateKPI, weight]);
+  }, [addKPI, category, clearForm, editingId, kpiName, kpis, target, unit, updateKPI, weight]);
 
   const handleDeleteKPI = useCallback(
     (id: string) => {

@@ -3,16 +3,24 @@ import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
+import { useAppData } from '@/context/AppDataContext';
 import {
   LifeBuddyScoringPreferences,
   ScoringSection,
   usePreferences,
 } from '@/context/PreferencesContext';
+import { getLocaleDisplayLabel, localeDefinitions } from '@/src/data/locales';
 import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
+import { appendAuditEntry, getAuditLog } from '@/services/auditLogService';
+import { getConsents, updateConsent } from '@/services/consentService';
+import { getEventLog } from '@/services/eventBus';
+import { exportPackageToJson } from '@/services/exportService';
 import Constants from 'expo-constants';
-import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+import { ConsentRecord, ConsentType } from '@/types/consent';
 
 function PlaceholderRow({
   title,
@@ -177,17 +185,119 @@ function LifeBuddyWeightSection({
 
 export default function PreferencesScreen() {
   const { theme, themes, selectedThemeId, setSelectedThemeId } = useTheme();
+  const { categories, kpis, subtasks, entries } = useAppData();
   const {
     onboardingCompleted,
+    onboardingProfile,
     reminderPreferences,
     updateReminderPreference,
     resetReminderPreferences,
     lifeBuddyScoringPreferences,
+    localePreferences,
     updateLifeBuddyScoringPreference,
     resetLifeBuddyScoringPreferences,
+    selectedLanguage,
+    setSelectedLocale,
   } = usePreferences();
   const deviceType = useDeviceType();
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const [consents, setConsents] = useState<ConsentRecord[]>([]);
+  const [auditCount, setAuditCount] = useState(0);
+  const [eventCount, setEventCount] = useState(0);
+  const [lastExportSummary, setLastExportSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadPlatformFoundations = async () => {
+      const [loadedConsents, auditLog, eventLog] = await Promise.all([
+        getConsents(),
+        getAuditLog(),
+        getEventLog(),
+      ]);
+      setConsents(loadedConsents);
+      setAuditCount(auditLog.length);
+      setEventCount(eventLog.length);
+    };
+
+    loadPlatformFoundations().catch((error) => {
+      console.error('Error loading platform foundation data', error);
+    });
+  }, []);
+
+  const handleToggleConsent = async (consentType: ConsentType, granted: boolean) => {
+    const nextRecord = await updateConsent(consentType, granted);
+    setConsents((current) =>
+      current.map((record) => (record.consentType === consentType ? nextRecord : record))
+    );
+    await appendAuditEntry({
+      action: 'CONSENT_UPDATED',
+      entityType: 'consent',
+      entityId: consentType,
+      after: nextRecord,
+    });
+  };
+
+  const handleExportJson = async () => {
+    const [consentRecords, auditLog] = await Promise.all([getConsents(), getAuditLog()]);
+    const exportJson = exportPackageToJson({
+      version: '1.0.0',
+      exportedAt: new Date().toISOString(),
+      appVersion,
+      locale: localePreferences,
+      preferences: {
+        onboardingCompleted,
+        onboardingProfile,
+        reminderPreferences,
+        selectedLanguage,
+        localePreferences,
+      },
+      categories,
+      kpis,
+      activities: subtasks,
+      entries,
+      reviews: [],
+      insights: [],
+      consents: consentRecords,
+      auditLog,
+    });
+
+    setLastExportSummary(`Generated ${exportJson.length.toLocaleString()} characters of JSON.`);
+    Alert.alert('Export JSON Ready', 'A local JSON export package was generated successfully.');
+  };
+
+  const consentLabels: Record<ConsentType, { title: string; subtitle: string }> = {
+    ai_processing: {
+      title: 'AI processing',
+      subtitle: 'Placeholder consent for future AI-assisted processing.',
+    },
+    analytics: {
+      title: 'Analytics',
+      subtitle: 'Placeholder consent for privacy-aware product analytics.',
+    },
+    notifications: {
+      title: 'Notifications',
+      subtitle: 'Placeholder consent for reminders and proactive notifications.',
+    },
+    health_data: {
+      title: 'Health data',
+      subtitle: 'Placeholder consent for future health integrations.',
+    },
+    calendar_access: {
+      title: 'Calendar access',
+      subtitle: 'Placeholder consent for calendar sync and scheduling features.',
+    },
+    contacts_access: {
+      title: 'Contacts access',
+      subtitle: 'Placeholder consent for contact-based workflows.',
+    },
+    public_profile: {
+      title: 'Public profile',
+      subtitle: 'Placeholder consent for optional community-facing identity features.',
+    },
+    benchmarking: {
+      title: 'Benchmarking',
+      subtitle: 'Placeholder consent for anonymized comparisons and insights.',
+    },
+  };
 
   const pageContent = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
@@ -206,6 +316,35 @@ export default function PreferencesScreen() {
           <Text style={[styles.sectionHint, { color: theme.textSecondary }]}>
             Choose the look that feels best for your daily workflow.
           </Text>
+
+          <Text style={[styles.groupTitle, { color: theme.primary }]}>Locale</Text>
+          <View style={styles.languageRow}>
+            {localeDefinitions.filter((locale) => locale.recommended).map((locale) => {
+              const isSelected = localePreferences.locale === locale.id;
+              return (
+                <TouchableOpacity
+                  key={locale.id}
+                  style={[
+                    styles.languageChip,
+                    {
+                      backgroundColor: isSelected ? theme.buttonPrimary : theme.buttonSecondary,
+                      borderColor: isSelected ? theme.buttonPrimary : theme.cardBorder,
+                      borderRadius: theme.borderRadius.sm,
+                    },
+                  ]}
+                  onPress={() => setSelectedLocale(locale.id)}
+                  activeOpacity={0.85}>
+                  <Text
+                    style={[
+                      styles.languageChipText,
+                      { color: isSelected ? '#ffffff' : theme.textPrimary },
+                    ]}>
+                    {getLocaleDisplayLabel(locale).replace('\n', ' · ')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <ResponsiveGrid>
             {themes.map((option) => {
@@ -355,11 +494,50 @@ export default function PreferencesScreen() {
             backgroundColor: theme.secondaryBackground,
             borderColor: theme.cardBorder,
           }}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Consent</Text>
+          <Text style={[styles.sectionHint, { color: theme.textSecondary }]}>
+            Local placeholder controls for future data and platform permissions.
+          </Text>
+          {consents.map((record) => (
+            <TogglePreferenceRow
+              key={record.consentType}
+              title={consentLabels[record.consentType].title}
+              subtitle={consentLabels[record.consentType].subtitle}
+              value={record.granted}
+              onToggle={() => handleToggleConsent(record.consentType, !record.granted)}
+            />
+          ))}
+        </SectionCard>
+
+        <SectionCard
+          style={{
+            backgroundColor: theme.secondaryBackground,
+            borderColor: theme.cardBorder,
+          }}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Data</Text>
-          <PlaceholderRow
-            title="Export data"
-            subtitle="Placeholder for future data export and portability tools."
-          />
+          <TouchableOpacity
+            style={[
+              styles.resetButton,
+              {
+                backgroundColor: theme.buttonSecondary,
+                borderColor: theme.cardBorder,
+                borderRadius: theme.borderRadius.md,
+                marginTop: 0,
+                marginBottom: 12,
+              },
+            ]}
+            onPress={() => {
+              handleExportJson().catch((error) => {
+                console.error('Error exporting JSON', error);
+                Alert.alert('Export failed', 'Could not generate the JSON export package.');
+              });
+            }}
+            activeOpacity={0.85}>
+            <Text style={[styles.resetButtonText, { color: theme.textPrimary }]}>Export JSON</Text>
+          </TouchableOpacity>
+          {lastExportSummary ? (
+            <Text style={[styles.exportHint, { color: theme.textSecondary }]}>{lastExportSummary}</Text>
+          ) : null}
           <PlaceholderRow
             title="Import data"
             subtitle="Placeholder for future import and restore workflows."
@@ -385,6 +563,14 @@ export default function PreferencesScreen() {
             subtitle={theme.name}
           />
           <PlaceholderRow
+            title="Locale"
+            subtitle={`${localePreferences.locale} • ${localePreferences.countryCode} • ${localePreferences.currencyCode}`}
+          />
+          <PlaceholderRow
+            title="Timezone"
+            subtitle={localePreferences.timezone}
+          />
+          <PlaceholderRow
             title="Onboarding"
             subtitle={onboardingCompleted ? 'Completed' : 'Not completed'}
           />
@@ -392,6 +578,16 @@ export default function PreferencesScreen() {
             title="Privacy Policy"
             subtitle="Placeholder for future privacy policy link and legal information."
           />
+        </SectionCard>
+
+        <SectionCard
+          style={{
+            backgroundColor: theme.secondaryBackground,
+            borderColor: theme.cardBorder,
+          }}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Debug Foundations</Text>
+          <PlaceholderRow title="Audit log entries" subtitle={`${auditCount} local audit records`} />
+          <PlaceholderRow title="Domain events" subtitle={`${eventCount} local event records`} />
         </SectionCard>
       </PageContainer>
     </ScrollView>
@@ -443,6 +639,23 @@ const styles = StyleSheet.create({
   },
   preferenceGroup: {
     marginTop: 10,
+  },
+  languageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 18,
+  },
+  languageChip: {
+    minHeight: 38,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  languageChipText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   groupTitle: {
     fontSize: 14,
@@ -522,5 +735,10 @@ const styles = StyleSheet.create({
   resetButtonText: {
     fontSize: 15,
     fontWeight: '800',
+  },
+  exportHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 8,
   },
 });

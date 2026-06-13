@@ -1,13 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
-export interface Category {
-  id: string;
+import { appendAuditEntry } from '@/services/auditLogService';
+import { emitDomainEvent } from '@/services/eventBus';
+import { ENTITY_SCHEMA_VERSION, EntityMetadata } from '@/types/entities';
+import { LifeLibraryPackApplyPayload } from '@/types/lifeLibraryPack';
+
+type EntityInput<T extends EntityMetadata> = Omit<T, keyof EntityMetadata>;
+
+export interface Category extends EntityMetadata {
   name: string;
 }
 
-export interface KPI {
-  id: string;
+export interface KPI extends EntityMetadata {
   name: string;
   category: string;
   target: number;
@@ -19,8 +24,7 @@ export interface KPI {
 
 export type SubtaskFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
 
-export interface Subtask {
-  id: string;
+export interface Subtask extends EntityMetadata {
   kpiId: string;
   name: string;
   frequency: SubtaskFrequency;
@@ -110,16 +114,14 @@ export interface TemplatePackPayload {
 }
 
 /** One saved daily log: actuals keyed by KPI id, score for that day. */
-export interface DayEntry {
-  id: string;
+export interface DayEntry extends EntityMetadata {
   date: string;
   actuals: Record<string, string>;
   notes?: Record<string, string>;
   totalScore: number;
 }
 
-export interface ManagedEntry {
-  id: string;
+export interface ManagedEntry extends EntityMetadata {
   kpiId: string;
   date: string;
   actual: string;
@@ -129,6 +131,66 @@ export interface ManagedEntry {
 export interface EntryMutationResult {
   success: boolean;
   error?: string;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function createEntityId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createEntityMetadata(prefix: string, id?: string): EntityMetadata {
+  const timestamp = nowIso();
+  const nextId = id ?? createEntityId(prefix);
+
+  return {
+    id: nextId,
+    stableId: nextId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    archived: false,
+    version: ENTITY_SCHEMA_VERSION,
+  };
+}
+
+function ensureEntityMetadata<T extends { id?: string }>(
+  entity: T,
+  prefix: string,
+  fallbackId?: string
+): T & EntityMetadata {
+  const metadata = entity as Partial<EntityMetadata>;
+  const nextId = entity.id ?? fallbackId ?? createEntityId(prefix);
+  const createdAt =
+    typeof metadata.createdAt === 'string' && metadata.createdAt ? metadata.createdAt : nowIso();
+  const updatedAt =
+    typeof metadata.updatedAt === 'string' && metadata.updatedAt ? metadata.updatedAt : createdAt;
+  const stableId =
+    typeof metadata.stableId === 'string' && metadata.stableId ? metadata.stableId : nextId;
+  const archived = typeof metadata.archived === 'boolean' ? metadata.archived : false;
+  const version =
+    typeof metadata.version === 'number' && Number.isFinite(metadata.version)
+      ? metadata.version
+      : ENTITY_SCHEMA_VERSION;
+
+  return {
+    ...entity,
+    id: nextId,
+    stableId,
+    createdAt,
+    updatedAt,
+    archived,
+    version,
+  } as T & EntityMetadata;
+}
+
+function touchEntity<T extends EntityMetadata>(entity: T): T {
+  return {
+    ...entity,
+    updatedAt: nowIso(),
+    version: entity.version + 1,
+  };
 }
 
 function todayYMD(): string {
@@ -201,6 +263,59 @@ function cleanNotesMap(notes?: Record<string, string>): Record<string, string> |
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+function normalizeCategory(category: Partial<Category>): Category {
+  return ensureEntityMetadata(
+    {
+      name: category.name?.trim() || 'Untitled Category',
+      ...category,
+    },
+    'category'
+  );
+}
+
+function normalizeKpi(kpi: Partial<KPI>): KPI {
+  return ensureEntityMetadata(
+    {
+      name: kpi.name?.trim() || 'Untitled KPI',
+      category: kpi.category?.trim() || 'Other',
+      target: typeof kpi.target === 'number' ? kpi.target : 0,
+      unit: kpi.unit ?? '',
+      weight: typeof kpi.weight === 'number' ? kpi.weight : 0,
+      ...kpi,
+    },
+    'kpi'
+  );
+}
+
+function normalizeSubtask(subtask: Partial<Subtask>): Subtask {
+  return ensureEntityMetadata(
+    {
+      kpiId: subtask.kpiId ?? '',
+      name: subtask.name?.trim() || 'Untitled Activity',
+      frequency: subtask.frequency ?? 'weekly',
+      targetCount: typeof subtask.targetCount === 'number' ? subtask.targetCount : 1,
+      ...subtask,
+    },
+    'activity'
+  );
+}
+
+function normalizeDayEntry(entry: Partial<DayEntry>): DayEntry {
+  const date = entry.date?.trim() || todayYMD();
+
+  return ensureEntityMetadata(
+    {
+      date,
+      actuals: entry.actuals ?? {},
+      notes: cleanNotesMap(entry.notes),
+      totalScore: typeof entry.totalScore === 'number' ? entry.totalScore : 0,
+      ...entry,
+    },
+    'entry',
+    entry.id ?? `entry-${date}`
+  );
+}
+
 const SAMPLE_KP_IDS = {
   sleep: 'sample-k-sleep',
   workout: 'sample-k-workout',
@@ -210,53 +325,53 @@ const SAMPLE_KP_IDS = {
 } as const;
 
 const SAMPLE_CATEGORIES: Category[] = [
-  { id: 'sample-c-health', name: 'Health' },
-  { id: 'sample-c-career', name: 'Career' },
-  { id: 'sample-c-learning', name: 'Learning' },
-  { id: 'sample-c-finance', name: 'Finance' },
+  normalizeCategory({ id: 'sample-c-health', name: 'Health' }),
+  normalizeCategory({ id: 'sample-c-career', name: 'Career' }),
+  normalizeCategory({ id: 'sample-c-learning', name: 'Learning' }),
+  normalizeCategory({ id: 'sample-c-finance', name: 'Finance' }),
 ];
 
 const SAMPLE_KPIS: KPI[] = [
-  {
+  normalizeKpi({
     id: SAMPLE_KP_IDS.sleep,
     name: 'Sleep',
     category: 'Health',
     target: 8,
     unit: 'hours',
     weight: 25,
-  },
-  {
+  }),
+  normalizeKpi({
     id: SAMPLE_KP_IDS.workout,
     name: 'Workout',
     category: 'Health',
     target: 30,
     unit: 'min',
     weight: 15,
-  },
-  {
+  }),
+  normalizeKpi({
     id: SAMPLE_KP_IDS.deepWork,
     name: 'Deep Work',
     category: 'Career',
     target: 4,
     unit: 'hours',
     weight: 25,
-  },
-  {
+  }),
+  normalizeKpi({
     id: SAMPLE_KP_IDS.reading,
     name: 'Reading',
     category: 'Learning',
     target: 30,
     unit: 'min',
     weight: 15,
-  },
-  {
+  }),
+  normalizeKpi({
     id: SAMPLE_KP_IDS.savings,
     name: 'Savings Check',
     category: 'Finance',
     target: 1,
     unit: 'yes/no',
     weight: 20,
-  },
+  }),
 ];
 
 /** One row per day (oldest → newest): realistic inputs; scores end up varied. */
@@ -279,13 +394,13 @@ interface AppDataContextType {
   // ─── NEW ───
   subtasks: Subtask[];
   subtaskLogs: SubtaskLog[];
-  addSubtask: (subtask: Omit<Subtask, 'id'>) => Subtask;
+  addSubtask: (subtask: EntityInput<Subtask>) => Subtask;
   updateSubtask: (subtask: Subtask) => void;
   deleteSubtask: (id: string) => void;
   toggleSubtaskLog: (subtaskId: string, date: string) => void;
   // ─── People To-dos ───
   peopleTodos: PeopleTodo[];
-  addPeopleTodo: (peopleTodo: Omit<PeopleTodo, 'id'>) => void;
+  addPeopleTodo: (peopleTodo: EntityInput<PeopleTodo>) => void;
   deletePeopleTodo: (id: string) => void;
   getPeopleTodosForKpi: (kpiId: string) => PeopleTodo[];
   // ──────────────────────
@@ -318,7 +433,7 @@ interface AppDataContextType {
     totalScore: number,
     notes?: Record<string, string>
   ) => void;
-  createEntry: (entry: Omit<ManagedEntry, 'id'>) => EntryMutationResult;
+  createEntry: (entry: EntityInput<ManagedEntry>) => EntryMutationResult;
   updateEntry: (
     entryId: string,
     updates: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
@@ -329,6 +444,7 @@ interface AppDataContextType {
     overrides?: Partial<Pick<ManagedEntry, 'date' | 'actual' | 'notes'>>
   ) => EntryMutationResult;
   applyTemplatePack: (pack: TemplatePackPayload) => void;
+  applyLifeLibraryPack: (pack: LifeLibraryPackApplyPayload) => void;
   // ─── NEW: Contacts ───
   savedContacts: SavedContact[];
   addSavedContact: (contact: Omit<SavedContact, 'id'>) => void;
@@ -384,15 +500,15 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       try {
         const savedCategories = await AsyncStorage.getItem('categories');
         if (savedCategories) {
-          setCategories(JSON.parse(savedCategories));
+          setCategories((JSON.parse(savedCategories) as Partial<Category>[]).map(normalizeCategory));
         }
         const savedKpis = await AsyncStorage.getItem('kpis');
         if (savedKpis) {
-          setKpis(JSON.parse(savedKpis));
+          setKpis((JSON.parse(savedKpis) as Partial<KPI>[]).map(normalizeKpi));
         }
         const savedEntries = await AsyncStorage.getItem('entries');
         if (savedEntries) {
-          setEntries(JSON.parse(savedEntries));
+          setEntries((JSON.parse(savedEntries) as Partial<DayEntry>[]).map(normalizeDayEntry));
         }
         const savedLatestActuals = await AsyncStorage.getItem('latestActuals');
         if (savedLatestActuals) {
@@ -406,7 +522,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         // ─── NEW: load subtasks and subtaskLogs ───
         const savedSubtasks = await AsyncStorage.getItem('subtasks');
         if (savedSubtasks) {
-          setSubtasks(JSON.parse(savedSubtasks));
+          setSubtasks((JSON.parse(savedSubtasks) as Partial<Subtask>[]).map(normalizeSubtask));
         }
         const savedSubtaskLogs = await AsyncStorage.getItem('subtaskLogs');
         if (savedSubtaskLogs) {
@@ -607,13 +723,15 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     setEntries((prev) => {
       const index = prev.findIndex((e) => e.date === date);
-      const nextEntry: DayEntry = {
-        id: index >= 0 ? prev[index].id : Date.now().toString(),
+      const previousEntry = index >= 0 ? prev[index] : undefined;
+      const nextEntry = normalizeDayEntry({
+        ...(previousEntry ? touchEntity(previousEntry) : createEntityMetadata('entry')),
+        id: previousEntry?.id,
         date,
         actuals: { ...actuals },
         notes: cleanNotesMap(notes),
         totalScore: roundedScore,
-      };
+      });
       const nextEntries =
         index >= 0
           ? prev.map((e, i) => (i === index ? nextEntry : e))
@@ -622,9 +740,22 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       syncLatestEntryState(nextEntries);
       return nextEntries;
     });
+
+    void emitDomainEvent({
+      eventName: 'ENTRY_LOGGED',
+      entityType: 'entry',
+      entityId: date,
+      metadata: { kpiCount: Object.keys(actuals).length, totalScore: roundedScore },
+    });
+    void appendAuditEntry({
+      action: 'ENTRY_LOGGED',
+      entityType: 'entry',
+      entityId: date,
+      after: { actuals, totalScore: roundedScore, notes: cleanNotesMap(notes) ?? null },
+    });
   };
 
-  const createEntry = (entry: Omit<ManagedEntry, 'id'>): EntryMutationResult => {
+  const createEntry = (entry: EntityInput<ManagedEntry>): EntryMutationResult => {
     const trimmedDate = entry.date.trim();
     const trimmedActual = entry.actual.trim();
     const trimmedNotes = entry.notes?.trim();
@@ -653,13 +784,14 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         ...(targetDay?.notes ?? {}),
         [entry.kpiId]: trimmedNotes ?? '',
       });
-      const nextDay: DayEntry = {
-        id: targetDay?.id ?? Date.now().toString(),
+      const nextDay = normalizeDayEntry({
+        ...(targetDay ? touchEntity(targetDay) : createEntityMetadata('entry')),
+        id: targetDay?.id,
         date: trimmedDate,
         actuals: nextActuals,
         notes: nextNotes,
         totalScore: totalScoreFromActuals(kpis, nextActuals),
-      };
+      });
 
       const nextEntries =
         dayIndex >= 0
@@ -668,6 +800,19 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       syncLatestEntryState(nextEntries);
       return nextEntries;
+    });
+
+    void emitDomainEvent({
+      eventName: 'ENTRY_LOGGED',
+      entityType: 'entry',
+      entityId: `${trimmedDate}::${entry.kpiId}`,
+      metadata: { date: trimmedDate, kpiId: entry.kpiId },
+    });
+    void appendAuditEntry({
+      action: 'ENTRY_CREATED',
+      entityType: 'entry',
+      entityId: `${trimmedDate}::${entry.kpiId}`,
+      after: { date: trimmedDate, kpiId: entry.kpiId, actual: trimmedActual, notes: trimmedNotes ?? null },
     });
 
     return { success: true };
@@ -715,12 +860,12 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
           delete nextNotesMap[parsed.kpiId];
 
           if (Object.keys(nextActuals).length > 0) {
-            nextEntries.push({
-              ...dayEntry,
+            nextEntries.push(normalizeDayEntry({
+              ...touchEntity(dayEntry),
               actuals: nextActuals,
               notes: cleanNotesMap(nextNotesMap),
               totalScore: totalScoreFromActuals(kpis, nextActuals),
-            });
+            }));
           }
           return;
         }
@@ -738,13 +883,14 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         ...(targetDay?.notes ?? {}),
         [parsed.kpiId]: nextNotes,
       });
-      const nextDay: DayEntry = {
-        id: targetDay?.id ?? `entry-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      const nextDay = normalizeDayEntry({
+        ...(targetDay ? touchEntity(targetDay) : createEntityMetadata('entry')),
+        id: targetDay?.id,
         date: nextDate,
         actuals: mergedActuals,
         notes: mergedNotes,
         totalScore: totalScoreFromActuals(kpis, mergedActuals),
-      };
+      });
 
       const mergedEntries =
         targetIndex >= 0
@@ -779,12 +925,12 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (Object.keys(nextActuals).length === 0) return [];
 
         return [
-          {
-            ...dayEntry,
+          normalizeDayEntry({
+            ...touchEntity(dayEntry),
             actuals: nextActuals,
             notes: cleanNotesMap(nextNotes),
             totalScore: totalScoreFromActuals(kpis, nextActuals),
-          },
+          }),
         ];
       });
 
@@ -817,11 +963,23 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const addCategory = (name: string) => {
-    const newCategory: Category = {
-      id: Date.now().toString(),
+    const newCategory = normalizeCategory({
+      ...createEntityMetadata('category'),
       name: name.trim(),
-    };
+    });
     setCategories(prev => [...prev, newCategory]);
+    void emitDomainEvent({
+      eventName: 'CATEGORY_CREATED',
+      entityType: 'category',
+      entityId: newCategory.id,
+      metadata: { name: newCategory.name },
+    });
+    void appendAuditEntry({
+      action: 'CATEGORY_CREATED',
+      entityType: 'category',
+      entityId: newCategory.id,
+      after: newCategory,
+    });
   };
 
   const updateCategory = (id: string, newName: string) => {
@@ -834,11 +992,13 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     const oldName = cat.name;
 
     setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, name: trimmed } : c))
+      prev.map((c) => (c.id === id ? normalizeCategory({ ...touchEntity(c), name: trimmed }) : c))
     );
 
     setKpis((prev) =>
-      prev.map((k) => (k.category === oldName ? { ...k, category: trimmed } : k))
+      prev.map((k) =>
+        k.category === oldName ? normalizeKpi({ ...touchEntity(k), category: trimmed }) : k
+      )
     );
   };
 
@@ -850,17 +1010,31 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     weight: number;
   }): KPI => {
     console.log('addKPI called with', kpi);
-    const newKPI: KPI = {
-      id: Date.now().toString(),
+    const newKPI = normalizeKpi({
+      ...createEntityMetadata('kpi'),
       ...kpi,
-    };
+    });
     console.log('newKPI:', newKPI);
     setKpis(prev => [...prev, newKPI]);
+    void emitDomainEvent({
+      eventName: 'KPI_CREATED',
+      entityType: 'kpi',
+      entityId: newKPI.id,
+      metadata: { name: newKPI.name, category: newKPI.category },
+    });
+    void appendAuditEntry({
+      action: 'KPI_CREATED',
+      entityType: 'kpi',
+      entityId: newKPI.id,
+      after: newKPI,
+    });
     return newKPI;
   };
 
   const updateKPI = (updatedKpi: KPI) => {
-    setKpis((prev) => prev.map((k) => (k.id === updatedKpi.id ? updatedKpi : k)));
+    setKpis((prev) =>
+      prev.map((k) => (k.id === updatedKpi.id ? normalizeKpi(touchEntity(updatedKpi)) : k))
+    );
   };
 
   const deleteKPI = (id: string) => {
@@ -880,17 +1054,31 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // ─── NEW: Subtask CRUD ─────────────────────────────────────────────────────
 
-  const addSubtask = (subtask: Omit<Subtask, 'id'>): Subtask => {
-    const newSubtask: Subtask = {
-      id: Date.now().toString(),
+  const addSubtask = (subtask: EntityInput<Subtask>): Subtask => {
+    const newSubtask = normalizeSubtask({
+      ...createEntityMetadata('activity'),
       ...subtask,
-    };
+    });
     setSubtasks(prev => [...prev, newSubtask]);
+    void emitDomainEvent({
+      eventName: 'ACTIVITY_CREATED',
+      entityType: 'activity',
+      entityId: newSubtask.id,
+      metadata: { kpiId: newSubtask.kpiId, name: newSubtask.name },
+    });
+    void appendAuditEntry({
+      action: 'ACTIVITY_CREATED',
+      entityType: 'activity',
+      entityId: newSubtask.id,
+      after: newSubtask,
+    });
     return newSubtask;
   };
 
   const updateSubtask = (updated: Subtask) => {
-    setSubtasks(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+    setSubtasks(prev =>
+      prev.map((s) => (s.id === updated.id ? normalizeSubtask(touchEntity(updated)) : s))
+    );
   };
 
   const deleteSubtask = (id: string) => {
@@ -901,6 +1089,8 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   /** Toggle a subtask's completed state for a given date. Creates or flips the log. */
   const toggleSubtaskLog = (subtaskId: string, date: string) => {
+    const existing = subtaskLogs.find(l => l.subtaskId === subtaskId && l.date === date);
+    const willComplete = existing ? !existing.completed : true;
     setSubtaskLogs(prev => {
       const existing = prev.find(l => l.subtaskId === subtaskId && l.date === date);
       if (existing) {
@@ -920,13 +1110,27 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         },
       ];
     });
+    if (willComplete) {
+      void emitDomainEvent({
+        eventName: 'ACTIVITY_COMPLETED',
+        entityType: 'activity',
+        entityId: subtaskId,
+        metadata: { date },
+      });
+      void appendAuditEntry({
+        action: 'ACTIVITY_COMPLETED',
+        entityType: 'activity',
+        entityId: subtaskId,
+        after: { date, completed: true },
+      });
+    }
   };
 
   // ─── NEW: People To-dos ─────────────────────────────────────────────────────
 
-  const addPeopleTodo = (peopleTodo: Omit<PeopleTodo, 'id'>) => {
+  const addPeopleTodo = (peopleTodo: EntityInput<PeopleTodo>) => {
     const newTodo: PeopleTodo = {
-      id: Date.now().toString(),
+      ...createEntityMetadata('activity'),
       ...peopleTodo,
     };
     setPeopleTodos(prev => [...prev, newTodo]);
@@ -1015,6 +1219,97 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // ──────────────────────────────────────────────────────────────────────────
 
+  const applyLifeLibraryPack = (pack: LifeLibraryPackApplyPayload) => {
+    const categoryMap = new Map(
+      categories.map((category) => [category.stableId || category.name.toLowerCase(), category])
+    );
+    const categoryNameMap = new Map(
+      categories.map((category) => [category.name.toLowerCase(), category])
+    );
+    const nextCategories = [...categories];
+
+    for (const category of pack.categories) {
+      const existing =
+        categoryMap.get(category.stableId) ?? categoryNameMap.get(category.name.toLowerCase());
+      if (existing) {
+        categoryMap.set(category.stableId, existing);
+        continue;
+      }
+
+      const created = normalizeCategory({
+        ...createEntityMetadata('category'),
+        stableId: category.stableId,
+        name: category.name,
+      });
+      nextCategories.push(created);
+      categoryMap.set(category.stableId, created);
+      categoryNameMap.set(created.name.toLowerCase(), created);
+    }
+
+    const kpiStableMap = new Map(kpis.map((kpi) => [kpi.stableId, kpi]));
+    const kpiNameMap = new Map(
+      kpis.map((kpi) => [`${kpi.category.toLowerCase()}::${kpi.name.toLowerCase()}`, kpi])
+    );
+    const nextKpis = [...kpis];
+
+    for (const kpi of pack.kpis) {
+      const categoryName =
+        categoryMap.get(kpi.categoryStableId)?.name ??
+        categoryNameMap.get(kpi.categoryName.toLowerCase())?.name ??
+        kpi.categoryName;
+      const lookupKey = `${categoryName.toLowerCase()}::${kpi.name.toLowerCase()}`;
+      const existing = kpiStableMap.get(kpi.stableId) ?? kpiNameMap.get(lookupKey);
+      if (existing) {
+        kpiStableMap.set(kpi.stableId, existing);
+        continue;
+      }
+
+      const created = normalizeKpi({
+        ...createEntityMetadata('kpi'),
+        stableId: kpi.stableId,
+        name: kpi.name,
+        category: categoryName,
+        target: kpi.target,
+        unit: kpi.unit,
+        weight: kpi.weight,
+      });
+      nextKpis.push(created);
+      kpiStableMap.set(kpi.stableId, created);
+      kpiNameMap.set(lookupKey, created);
+    }
+
+    const subtaskStableMap = new Map(subtasks.map((subtask) => [subtask.stableId, subtask]));
+    const subtaskNameMap = new Map(
+      subtasks.map((subtask) => [`${subtask.kpiId}::${subtask.name.toLowerCase()}`, subtask])
+    );
+    const nextSubtasks = [...subtasks];
+
+    for (const activity of pack.activities) {
+      const parentKpi = kpiStableMap.get(activity.kpiStableId);
+      if (!parentKpi) continue;
+
+      const lookupKey = `${parentKpi.id}::${activity.name.toLowerCase()}`;
+      const existing = subtaskStableMap.get(activity.stableId) ?? subtaskNameMap.get(lookupKey);
+      if (existing) continue;
+
+      const created = normalizeSubtask({
+        ...createEntityMetadata('activity'),
+        stableId: activity.stableId,
+        kpiId: parentKpi.id,
+        name: activity.name,
+        frequency: activity.frequency,
+        targetCount: activity.targetCount,
+      });
+      nextSubtasks.push(created);
+      subtaskStableMap.set(activity.stableId, created);
+      subtaskNameMap.set(lookupKey, created);
+    }
+
+    setCategories(nextCategories);
+    setKpis(nextKpis);
+    setSubtasks(nextSubtasks);
+  };
+
   const applyTemplatePack = (pack: TemplatePackPayload) => {
     const seenCatKeys = new Set<string>();
     const categoryNamesInOrder: string[] = [];
@@ -1048,7 +1343,12 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         const key = name.toLowerCase();
         if (existingKeys.has(key)) continue;
         existingKeys.add(key);
-        next.push({ id: `tpl-c-${idStamp}-${catIndex++}`, name });
+        next.push(
+          normalizeCategory({
+            ...createEntityMetadata('category', `tpl-c-${idStamp}-${catIndex++}`),
+            name,
+          })
+        );
       }
       return next;
     });
@@ -1065,14 +1365,16 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
             x.category.toLowerCase() === cat.toLowerCase()
         );
         if (dup) continue;
-        next.push({
-          id: `tpl-k-${idStamp}-${kpiIndex++}`,
-          name,
-          category: cat,
-          target: k.target,
-          unit: k.unit.trim(),
-          weight: k.weight,
-        });
+        next.push(
+          normalizeKpi({
+            ...createEntityMetadata('kpi', `tpl-k-${idStamp}-${kpiIndex++}`),
+            name,
+            category: cat,
+            target: k.target,
+            unit: k.unit.trim(),
+            weight: k.weight,
+          })
+        );
       }
       return next;
     });
@@ -1137,12 +1439,12 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         [SAMPLE_KP_IDS.reading]: row.reading,
         [SAMPLE_KP_IDS.savings]: row.savings,
       };
-      return {
-        id: `sample-entry-${date}`,
+      return normalizeDayEntry({
+        ...createEntityMetadata('entry', `sample-entry-${date}`),
         date,
         actuals,
         totalScore: totalScoreFromActuals(SAMPLE_KPIS, actuals),
-      };
+      });
     });
 
     const lastEntry = sampleEntries[sampleEntries.length - 1];
@@ -1232,6 +1534,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         deleteEntry,
         duplicateEntry,
         applyTemplatePack,
+        applyLifeLibraryPack,
         loadSampleData,
         clearAllData,
       }}

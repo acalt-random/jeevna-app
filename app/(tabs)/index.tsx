@@ -13,6 +13,8 @@ import {
   ScoringSection,
   usePreferences,
 } from '@/context/PreferencesContext';
+import { appendAuditEntry } from '@/services/auditLogService';
+import { emitDomainEvent } from '@/services/eventBus';
 import { buildLifeBuddySuggestions, LifeBuddySuggestion } from '@/services/suggestionEngine';
 import {
   buildResponsibilitySnapshot,
@@ -1126,6 +1128,27 @@ export default function HomeScreen() {
           });
         }
       }
+
+      void emitDomainEvent({
+        eventName: 'SUGGESTION_ACTIVATED',
+        entityType: 'suggestion',
+        entityId: suggestion.id,
+        metadata: {
+          title: suggestion.title,
+          category: suggestion.category,
+          kpiId: suggestion.kpiId,
+        },
+      });
+      void appendAuditEntry({
+        action: 'SUGGESTION_ACTIVATED',
+        entityType: 'suggestion',
+        entityId: suggestion.id,
+        after: {
+          title: suggestion.title,
+          category: suggestion.category,
+          type: suggestion.type,
+        },
+      });
     },
     [addCategory, addKPI, addSubtask, categories, kpis, subtasks]
   );

@@ -2,6 +2,7 @@ import { SectionCard } from '@/components/SectionCard';
 import { useTheme } from '@/context/ThemeContext';
 import { GeneratedOnboardingActivity, GeneratedOnboardingCategory } from '@/types/onboarding';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type RecommendationItem = {
@@ -34,6 +35,7 @@ function RecommendationRow({
   onToggle: () => void;
 }) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <View
@@ -51,7 +53,8 @@ function RecommendationRow({
           {formatFrequency(item.activity)}
         </Text>
         <Text style={[styles.rowReason, { color: theme.textMuted }]}>
-          Reason: {item.activity.reason ?? 'Life Buddy recommendation'}
+          {t('onboarding.recommendations.reasonLabel')}: {' '}
+          {item.activity.reason ?? t('onboarding.recommendations.fallbackReason')}
         </Text>
         <Text style={[styles.rowHint, { color: theme.textMuted }]}>
           {item.categoryName} {'->'} {item.kpiName}
@@ -76,7 +79,9 @@ function RecommendationRow({
             styles.statusPillText,
             { color: item.activity.selected ? '#ffffff' : theme.textPrimary },
           ]}>
-          {item.activity.selected ? 'Selected' : 'Available'}
+          {item.activity.selected
+            ? t('onboarding.recommendations.selected')
+            : t('onboarding.recommendations.available')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -92,6 +97,7 @@ export function LifeBuddyRecommendations({
   onToggleActivity,
 }: LifeBuddyRecommendationsProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const flattenedItems: RecommendationItem[] = categories.flatMap((category) =>
     category.kpis.flatMap((kpi) =>
@@ -122,10 +128,11 @@ export function LifeBuddyRecommendations({
           backgroundColor: theme.secondaryBackground,
           borderColor: theme.cardBorder,
         }}>
-        <Text style={[styles.title, { color: theme.textPrimary }]}>Life Buddy Recommendations</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>
+          {t('onboarding.recommendations.title')}
+        </Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Life Buddy picked the most useful activities first so onboarding stays fast. Selected
-          items become active activities. Unselected items stay in the library for later.
+          {t('onboarding.recommendations.subtitle')}
         </Text>
 
         <View style={styles.buttonRow}>
@@ -139,7 +146,9 @@ export function LifeBuddyRecommendations({
             ]}
             onPress={onActivateAllRecommended}
             activeOpacity={0.85}>
-            <Text style={styles.primaryButtonText}>Activate All Recommended</Text>
+            <Text style={styles.primaryButtonText}>
+              {t('onboarding.recommendations.activateAll')}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -154,7 +163,7 @@ export function LifeBuddyRecommendations({
             onPress={onStartCustomizing}
             activeOpacity={0.85}>
             <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-              Customize Selection
+              {t('onboarding.recommendations.customize')}
             </Text>
           </TouchableOpacity>
 
@@ -171,7 +180,7 @@ export function LifeBuddyRecommendations({
               onPress={onContinue}
               activeOpacity={0.85}>
               <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                Continue
+                {t('common.continue')}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -179,9 +188,11 @@ export function LifeBuddyRecommendations({
       </SectionCard>
 
       <SectionCard>
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Recommended Activities</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+          {t('onboarding.recommendations.recommendedTitle')}
+        </Text>
         <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-          Highest-priority actions based on your selected triggers.
+          {t('onboarding.recommendations.recommendedSubtitle')}
         </Text>
         {recommendedItems.map((item) => (
           <RecommendationRow
@@ -194,13 +205,15 @@ export function LifeBuddyRecommendations({
       </SectionCard>
 
       <SectionCard>
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Optional Activities</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+          {t('onboarding.recommendations.optionalTitle')}
+        </Text>
         <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-          Useful extras you can activate now or leave for later.
+          {t('onboarding.recommendations.optionalSubtitle')}
         </Text>
         {optionalItems.length === 0 ? (
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            No optional activities for this setup.
+            {t('onboarding.recommendations.optionalEmpty')}
           </Text>
         ) : (
           optionalItems.map((item) => (

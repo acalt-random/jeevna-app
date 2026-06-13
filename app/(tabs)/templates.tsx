@@ -1,127 +1,123 @@
 import { DesktopShell } from '@/components/DesktopShell';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
+import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
 import { SectionCard } from '@/components/SectionCard';
 import { useAppData } from '@/context/AppDataContext';
+import { usePreferences } from '@/context/PreferencesContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useDeviceType } from '@/hooks/useDeviceType';
-import { templatePacks, TemplatePack } from '@/src/data/templatePacks';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import {
+  buildLifeLibraryPackApplyPayload,
+  getAvailableLifeLibraryPacks,
+  getLocalizedPackDescription,
+  getLocalizedPackTitle,
+} from '@/services/lifeLibraryPackService';
+import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 export default function TemplatesScreen() {
-  const { applyTemplatePack } = useAppData();
+  const { applyLifeLibraryPack } = useAppData();
+  const { localePreferences } = usePreferences();
+  const { theme } = useTheme();
   const deviceType = useDeviceType();
-  const router = useRouter();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleApply = (pack: TemplatePack) => {
-    const { id, title, blurb, ...payload } = pack;
-    applyTemplatePack(payload);
-    setSuccessMessage(title);
-  };
+  const packs = useMemo(() => getAvailableLifeLibraryPacks(localePreferences), [localePreferences]);
 
-  // Auto-redirect to home after showing success message
-  useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [successMessage, router]);
+  const handleApply = (packId: string) => {
+    const pack = packs.find((item) => item.id === packId);
+    if (!pack) return;
+    applyLifeLibraryPack(buildLifeLibraryPackApplyPayload(pack));
+    setSuccessMessage(getLocalizedPackTitle(pack));
+  };
 
   const pageContent = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
       <PageContainer>
         <PageHeader
-          title="Template packs"
-          subtitle="Add starter categories and KPIs without duplicating existing names."
+          title="Life Library Packs"
+          subtitle="Starter packs powered by the Life Library. Apply categories, KPIs, and activities without duplicates."
         />
 
-          {successMessage ? (
-            <Text style={styles.feedback}>{successMessage} template installed.</Text>
-          ) : null}
+        {successMessage ? (
+          <Text style={[styles.feedback, { color: theme.success }]}>{successMessage} installed.</Text>
+        ) : null}
 
-          {templatePacks.map((pack) => (
-            <SectionCard key={pack.id}>
-              <Text style={styles.packTitle}>{pack.title}</Text>
-              <Text style={styles.packBlurb}>{pack.blurb}</Text>
-              <Text style={styles.packMeta}>
-                {pack.categories.length} categories · {pack.kpis.length} KPIs
-              </Text>
-              <TouchableOpacity style={styles.button} onPress={() => handleApply(pack)} activeOpacity={0.8}>
-                <Text style={styles.buttonText}>Apply pack</Text>
-              </TouchableOpacity>
-            </SectionCard>
+        <ResponsiveGrid gap={14}>
+          {packs.map((pack) => (
+            <ResponsiveGridItem key={pack.id} mobileSpan={1} tabletSpan={3} desktopSpan={4}>
+              <SectionCard>
+                <Text style={[styles.packTitle, { color: theme.textPrimary }]}>
+                  {getLocalizedPackTitle(pack)}
+                </Text>
+                <Text style={[styles.packBlurb, { color: theme.textSecondary }]}>
+                  {getLocalizedPackDescription(pack)}
+                </Text>
+                <Text style={[styles.packMeta, { color: theme.textMuted }]}>
+                  {pack.categoryIds.length} categories · {pack.kpiIds.length} KPIs · {pack.activityIds.length} activities
+                </Text>
+                <Text style={[styles.packMeta, { color: theme.textMuted }]}>
+                  {pack.difficulty} · about {pack.estimatedSetupMinutes} min
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    {
+                      backgroundColor: theme.buttonPrimary,
+                      borderRadius: theme.borderRadius.md,
+                    },
+                  ]}
+                  onPress={() => handleApply(pack.id)}
+                  activeOpacity={0.8}>
+                  <Text style={styles.buttonText}>Apply pack</Text>
+                </TouchableOpacity>
+              </SectionCard>
+            </ResponsiveGridItem>
           ))}
-        </PageContainer>
-      </ScrollView>
-    );
+        </ResponsiveGrid>
+      </PageContainer>
+    </ScrollView>
+  );
 
   if (deviceType === 'desktop') {
-    return (
-      <DesktopShell title="Templates">
-        {pageContent}
-      </DesktopShell>
-    );
+    return <DesktopShell title="Life Library Packs">{pageContent}</DesktopShell>;
   }
 
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
-      {pageContent}
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>{pageContent}</SafeAreaView>;
 }
 
-
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
   feedback: {
     fontSize: 14,
-    color: '#86efac',
     textAlign: 'center',
     marginBottom: 16,
+    fontWeight: '700',
   },
   packTitle: {
     fontSize: 19,
-    fontWeight: '700',
-    color: '#f1f5f9',
+    fontWeight: '800',
     marginBottom: 6,
   },
   packBlurb: {
     fontSize: 14,
-    color: '#cbd5e1',
     lineHeight: 20,
     marginBottom: 8,
   },
   packMeta: {
     fontSize: 13,
-    color: '#64748b',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   button: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 12,
-    borderRadius: 8,
+    minHeight: 42,
+    paddingHorizontal: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

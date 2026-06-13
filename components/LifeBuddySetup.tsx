@@ -26,31 +26,20 @@ export function LifeBuddySetup({
   const { theme } = useTheme();
   const currentStep = steps[currentStepIndex];
   const currentSelections = selections[currentStep.id];
-
   const completedCount = steps.filter((step) => selections[step.id].length > 0).length;
 
   return (
-    <View>
-      <View style={styles.introBlock}>
-        <Text style={[styles.eyebrow, { color: theme.primary }]}>Onboarding V2</Text>
-        <Text style={[styles.title, { color: theme.textPrimary }]}>
-          Build your Life KPI system by identifying yourself, not by creating KPIs manually.
-        </Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Choose your roles, relationships, assets, interests, and priorities. Life Buddy will turn
-          those selections into categories, KPIs, activities, and relationship trackers.
-        </Text>
-      </View>
-
-      <View style={styles.progressDotsRow}>
+    <View style={styles.container}>
+      <View style={styles.progressRail}>
         {steps.map((step, index) => {
           const isComplete = selections[step.id].length > 0;
           const isActive = index === currentStepIndex;
+
           return (
             <View
               key={step.id}
               style={[
-                styles.progressDot,
+                styles.progressSegment,
                 {
                   backgroundColor: isActive
                     ? theme.primary
@@ -66,7 +55,7 @@ export function LifeBuddySetup({
       </View>
 
       <Text style={[styles.statusText, { color: theme.textMuted }]}>
-        {completedCount} of {steps.length} steps selected so far.
+        {`${completedCount} of ${steps.length} setup choices made`}
       </Text>
 
       <OnboardingQuestionCard
@@ -86,37 +75,19 @@ export function LifeBuddySetup({
 }
 
 const styles = StyleSheet.create({
-  introBlock: {
-    marginBottom: 18,
+  container: {
+    gap: 12,
   },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    lineHeight: 34,
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  progressDotsRow: {
+  progressRail: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
   },
-  progressDot: {
+  progressSegment: {
     flex: 1,
     height: 6,
   },
   statusText: {
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 14,
   },
 });

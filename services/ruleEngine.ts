@@ -1,12 +1,15 @@
 import { defaultReminderPreferences } from '@/context/PreferencesContext';
+import i18n from '@/src/localization/i18n';
 import {
   assetOptions,
+  currentFocusOptions,
   interestOptions,
+  lifeStageOptions,
   lifeLibraryActivities,
   lifeLibraryCategories,
   lifeLibraryKpis,
   lifeLibraryRules,
-  priorityOptions,
+  responsibilityOptions,
   relationshipOptions,
   relationshipTrackerTemplates,
   roleOptions,
@@ -30,10 +33,49 @@ const activityById = new Map(lifeLibraryActivities.map((activity) => [activity.i
 const kpisByCategoryId = new Map<string, LifeLibraryKpiTemplate[]>();
 const activitiesByKpiId = new Map<string, LifeLibraryActivityTemplate[]>();
 const triggerLabelById = new Map(
-  [...roleOptions, ...relationshipOptions, ...assetOptions, ...interestOptions, ...priorityOptions].map(
-    (option) => [option.id, option.label]
-  )
+  [
+    ...roleOptions,
+    ...lifeStageOptions,
+    ...relationshipOptions,
+    ...responsibilityOptions,
+    ...assetOptions,
+    ...interestOptions,
+    ...currentFocusOptions,
+  ].map((option) => [option.id, option.label ?? option.labelKey ?? option.id])
 );
+
+function getOptionLabel(optionId: string): string {
+  const labelOrKey = triggerLabelById.get(optionId);
+  if (!labelOrKey) return fallbackTitle(optionId);
+  if (!labelOrKey.includes('.')) return labelOrKey;
+  return t(labelOrKey, fallbackTitle(optionId));
+}
+
+function t(key: string | undefined, fallback: string): string {
+  if (!key) return fallback;
+  return i18n.t(key, { defaultValue: fallback });
+}
+
+function fallbackTitle(value: string): string {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function cleanGeneratedTitle(value: string, categoryName?: string): string {
+  let nextValue = value.trim();
+
+  nextValue = nextValue.replace(/^(activity|kpi|category)\s+/i, '');
+
+  if (categoryName) {
+    const escapedCategory = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    nextValue = nextValue.replace(new RegExp(`^${escapedCategory}\\s+`, 'i'), '');
+  }
+
+  return nextValue.trim();
+}
 
 for (const kpi of lifeLibraryKpis) {
   const current = kpisByCategoryId.get(kpi.categoryId) ?? [];
@@ -69,11 +111,14 @@ function createGeneratedCategory(
 
   return {
     id: makeId('category'),
-    name: template.name,
+    name: cleanGeneratedTitle(t(template.nameKey, fallbackTitle(template.id))),
     kpis: matchingKpis.map((kpi) => ({
       id: makeId('kpi'),
-      name: kpi.name,
-      categoryName: template.name,
+      name: cleanGeneratedTitle(
+        t(kpi.nameKey, fallbackTitle(kpi.id)),
+        t(template.nameKey, fallbackTitle(template.id))
+      ),
+      categoryName: cleanGeneratedTitle(t(template.nameKey, fallbackTitle(template.id))),
       target: kpi.target,
       unit: kpi.unit,
       weight: kpi.weight,
@@ -87,7 +132,10 @@ function createGeneratedCategory(
           const reasons = activityReasonsById.get(activity.id) ?? kpiReasonsById.get(kpi.id) ?? [];
           return {
           id: makeId('activity'),
-          name: activity.name,
+          name: cleanGeneratedTitle(
+            t(activity.nameKey, fallbackTitle(activity.id)),
+            t(template.nameKey, fallbackTitle(template.id))
+          ),
           frequency: activity.frequency,
           targetCount: activity.targetCount,
           importanceScore: activity.importanceScore,
@@ -111,23 +159,34 @@ function createGeneratedCategory(
 function activeTriggersFromSelections(selections: OnboardingSelections): string[] {
   return Array.from(
     new Set([
-    ...selections.roles,
-    ...selections.relationships,
-    ...selections.assets,
-    ...selections.interests,
-    ...selections.priorities,
+      ...selections.roles,
+      ...selections.lifeStages,
+      ...selections.relationships,
+      ...selections.responsibilities,
+      ...selections.assets,
+      ...selections.interests,
+      ...selections.priorities,
+      ...selections.currentFocus,
     ])
   );
 }
 
 function buildRelationshipTrackers(selections: OnboardingSelections): GeneratedRelationshipTracker[] {
-  const selectedTriggerSet = new Set(selections.relationships);
+  const selectedTriggerSet = new Set([
+    ...selections.relationships,
+    ...selections.responsibilities,
+  ]);
 
   return relationshipTrackerTemplates
     .filter((template) => selectedTriggerSet.has(template.trigger))
     .map((relationship) => ({
       id: makeId('relationship'),
-      ...relationship,
+      name: t(relationship.nameKey, fallbackTitle(relationship.trigger)),
+      relationshipType: t(relationship.relationshipTypeKey, 'Other'),
+      groupName: t(relationship.groupNameKey, 'Other'),
+      frequency: relationship.frequency,
+      todoTitle: t(relationship.todoTitleKey, 'Follow Up'),
+      notes: relationship.notesKey ? t(relationship.notesKey, '') : undefined,
     }));
 }
 
@@ -156,7 +215,7 @@ export function generateSetupFromSelections(
   const kpiReasonsById = new Map<string, string[]>();
 
   for (const rule of matchingRules) {
-    const reasonLabel = triggerLabelById.get(rule.trigger) ?? rule.trigger;
+    const reasonLabel = getOptionLabel(rule.trigger);
     rule.categories.forEach((categoryId) => activeCategoryIds.add(categoryId));
     rule.kpis.forEach((kpiId) => {
       activeKpiIds.add(kpiId);

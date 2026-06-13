@@ -1,7 +1,8 @@
 import { Category, KPI, Person, Subtask } from '@/context/AppDataContext';
-import { TemplatePack } from '@/src/data/templatePacks';
+import { LifeLibraryPack } from '@/types/lifeLibraryPack';
+import { getLocalizedPackDescription, getLocalizedPackTitle } from '@/services/lifeLibraryPackService';
 
-export type SearchEntityType = 'category' | 'kpi' | 'activity' | 'relationship' | 'template';
+export type SearchEntityType = 'category' | 'kpi' | 'activity' | 'relationship' | 'pack';
 
 export interface SearchResult {
   id: string;
@@ -14,7 +15,7 @@ export interface SearchResult {
   kpiId?: string;
   personId?: string;
   subtaskId?: string;
-  templateId?: string;
+  packId?: string;
 }
 
 export interface SearchIndexInput {
@@ -22,7 +23,7 @@ export interface SearchIndexInput {
   kpis: KPI[];
   subtasks: Subtask[];
   people: Person[];
-  templates: TemplatePack[];
+  packs: LifeLibraryPack[];
 }
 
 function normalize(value: string): string {
@@ -73,7 +74,7 @@ function scoreMatch(query: string, text: string, keywords: string[]): number {
 }
 
 export function buildSearchIndex(input: SearchIndexInput): SearchResult[] {
-  const { categories, kpis, subtasks, people, templates } = input;
+  const { categories, kpis, subtasks, people, packs } = input;
 
   const categoryResults: SearchResult[] = categories.map((category) => ({
     id: `category:${category.id}`,
@@ -129,27 +130,31 @@ export function buildSearchIndex(input: SearchIndexInput): SearchResult[] {
     personId: person.id,
   }));
 
-  const templateResults: SearchResult[] = templates.map((template) => ({
-    id: `template:${template.id}`,
-    type: 'template',
-    title: template.title,
-    subtitle: template.blurb,
+  const packResults: SearchResult[] = packs.map((pack) => {
+    const title = getLocalizedPackTitle(pack);
+    const description = getLocalizedPackDescription(pack);
+    return {
+    id: `pack:${pack.id}`,
+    type: 'pack',
+    title,
+    subtitle: description,
     keywords: [
-      template.title,
-      template.blurb,
-      ...template.categories,
-      ...template.kpis.flatMap((kpi) => [kpi.name, kpi.category]),
+      title,
+      description,
+      ...pack.tags,
+      ...pack.recommendedFor,
     ],
     score: 0,
-    templateId: template.id,
-  }));
+    packId: pack.id,
+  };
+  });
 
   return [
     ...categoryResults,
     ...kpiResults,
     ...activityResults,
     ...relationshipResults,
-    ...templateResults,
+    ...packResults,
   ];
 }
 
@@ -179,6 +184,6 @@ export function groupSearchResults(results: SearchResult[]): Record<SearchEntity
     kpi: results.filter((item) => item.type === 'kpi'),
     activity: results.filter((item) => item.type === 'activity'),
     relationship: results.filter((item) => item.type === 'relationship'),
-    template: results.filter((item) => item.type === 'template'),
+    pack: results.filter((item) => item.type === 'pack'),
   };
 }

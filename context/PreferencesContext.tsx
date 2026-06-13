@@ -1,11 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
+import i18n, {
+  getBestSupportedLanguage,
+  SupportedLanguage,
+} from '@/src/localization/i18n';
+import {
+  buildLocalePreferences,
+  detectDeviceLocalePreferences,
+  LocalePreferences,
+} from '@/services/localeService';
+import { appendAuditEntry } from '@/services/auditLogService';
+import { emitDomainEvent } from '@/services/eventBus';
+
 export const LIFE_BUDDY_SCORING_PREFERENCES_KEY = 'lifeKpi_lifeBuddyScoringPreferences';
 export const ONBOARDING_COMPLETED_KEY = 'lifeKpi_onboardingCompleted';
 export const REMINDER_PREFERENCES_KEY = 'lifeKpi_reminderPreferences';
 export const ONBOARDING_PROFILE_KEY = 'lifeKpi_onboardingProfile';
 export const SUGGESTION_DISMISSALS_KEY = 'lifeKpi_suggestionDismissals';
+export const APP_LANGUAGE_KEY = 'lifeKpi_selectedLanguage';
+export const APP_LOCALE_PREFERENCES_KEY = 'lifeKpi_localePreferences';
 
 export type ScoringSection =
   | 'categoryImportance'
@@ -22,11 +36,17 @@ export interface ReminderPreferences {
 }
 
 export interface OnboardingProfile {
+  locale: string[];
+  language: string[];
+  region: string[];
   roles: string[];
+  lifeStages: string[];
   relationships: string[];
+  responsibilities: string[];
   assets: string[];
   interests: string[];
   priorities: string[];
+  currentFocus: string[];
 }
 
 export interface LifeBuddyScoringPreferences {
@@ -122,8 +142,15 @@ interface PreferencesContextValue {
   onboardingProfile: OnboardingProfile;
   suggestionDismissedUntil: Record<string, string>;
   lifeBuddyScoringPreferences: LifeBuddyScoringPreferences;
+  selectedLanguage: SupportedLanguage;
+  selectedLocale: string;
+  localePreferences: LocalePreferences;
   setOnboardingCompleted: (value: boolean) => void;
   setOnboardingProfile: (profile: OnboardingProfile) => void;
+  setSelectedLanguage: (language: SupportedLanguage) => void;
+  setSelectedLocale: (localeId: string) => void;
+  setCountryCode: (countryCode: LocalePreferences['countryCode']) => void;
+  updateLocalePreferences: (value: Partial<LocalePreferences>) => void;
   dismissSuggestionUntil: (suggestionId: string, untilDate: string) => void;
   updateReminderPreference: (key: keyof ReminderPreferences, value: boolean) => void;
   resetReminderPreferences: () => void;
@@ -138,11 +165,17 @@ interface PreferencesContextValue {
 const PreferencesContext = createContext<PreferencesContextValue | undefined>(undefined);
 
 const defaultOnboardingProfile: OnboardingProfile = {
+  locale: [],
+  language: [],
+  region: [],
   roles: [],
+  lifeStages: [],
   relationships: [],
+  responsibilities: [],
   assets: [],
   interests: [],
   priorities: [],
+  currentFocus: [],
 };
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
@@ -153,6 +186,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [onboardingProfile, setOnboardingProfile] =
     useState<OnboardingProfile>(defaultOnboardingProfile);
+  const [localePreferences, setLocalePreferences] =
+    useState<LocalePreferences>(detectDeviceLocalePreferences());
+  const [selectedLanguage, setSelectedLanguage] =
+    useState<SupportedLanguage>(getBestSupportedLanguage(detectDeviceLocalePreferences().languageCode));
   const [suggestionDismissedUntil, setSuggestionDismissedUntil] = useState<Record<string, string>>({});
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -181,15 +218,23 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
         const savedOnboardingProfile = await AsyncStorage.getItem(ONBOARDING_PROFILE_KEY);
         if (savedOnboardingProfile) {
-          const parsed = JSON.parse(savedOnboardingProfile) as Partial<OnboardingProfile>;
+          const parsed = JSON.parse(savedOnboardingProfile) as Partial<OnboardingProfile> & {
+            language?: string[];
+          };
           setOnboardingProfile({
             ...defaultOnboardingProfile,
             ...parsed,
+            locale: parsed.locale ?? parsed.language ?? [],
+            language: parsed.language ?? [],
+            region: parsed.region ?? [],
             roles: parsed.roles ?? [],
+            lifeStages: parsed.lifeStages ?? [],
             relationships: parsed.relationships ?? [],
+            responsibilities: parsed.responsibilities ?? [],
             assets: parsed.assets ?? [],
             interests: parsed.interests ?? [],
             priorities: parsed.priorities ?? [],
+            currentFocus: parsed.currentFocus ?? parsed.priorities ?? [],
           });
         }
 
@@ -197,6 +242,23 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         if (savedDismissals) {
           setSuggestionDismissedUntil(JSON.parse(savedDismissals) as Record<string, string>);
         }
+
+        const savedLocalePreferences = await AsyncStorage.getItem(APP_LOCALE_PREFERENCES_KEY);
+        const hydratedLocalePreferences = savedLocalePreferences
+          ? buildLocalePreferences(JSON.parse(savedLocalePreferences) as Partial<LocalePreferences>)
+          : detectDeviceLocalePreferences();
+
+        const savedLanguage = await AsyncStorage.getItem(APP_LANGUAGE_KEY);
+        const nextLanguage = getBestSupportedLanguage(
+          savedLanguage ?? hydratedLocalePreferences.languageCode
+        );
+        const nextLocalePreferences = buildLocalePreferences({
+          ...hydratedLocalePreferences,
+          languageCode: nextLanguage,
+        });
+        setLocalePreferences(nextLocalePreferences);
+        setSelectedLanguage(nextLanguage);
+        await i18n.changeLanguage(nextLanguage);
       } catch (error) {
         console.error('Error loading Life Buddy scoring preferences', error);
       } finally {
@@ -260,6 +322,27 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     });
   }, [isHydrated, suggestionDismissedUntil]);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(APP_LANGUAGE_KEY, selectedLanguage).catch((error) => {
+      console.error('Error saving selected language', error);
+    });
+    i18n.changeLanguage(selectedLanguage).catch((error) => {
+      console.error('Error changing app language', error);
+    });
+  }, [isHydrated, selectedLanguage]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    AsyncStorage.setItem(APP_LOCALE_PREFERENCES_KEY, JSON.stringify(localePreferences)).catch(
+      (error) => {
+        console.error('Error saving locale preferences', error);
+      }
+    );
+  }, [isHydrated, localePreferences]);
+
   const value = useMemo<PreferencesContextValue>(() => {
     return {
       preferencesHydrated: isHydrated,
@@ -268,8 +351,85 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       onboardingProfile,
       suggestionDismissedUntil,
       lifeBuddyScoringPreferences,
+      selectedLanguage,
+      selectedLocale: localePreferences.locale,
+      localePreferences,
       setOnboardingCompleted,
       setOnboardingProfile,
+      setSelectedLanguage: (language) => {
+        setSelectedLanguage(language);
+        setLocalePreferences((current) =>
+          buildLocalePreferences({
+            countryCode: current.countryCode,
+            languageCode: language,
+          })
+        );
+        void emitDomainEvent({
+          eventName: 'LANGUAGE_CHANGED',
+          entityType: 'language',
+          entityId: language,
+          metadata: { languageCode: language },
+        });
+        void appendAuditEntry({
+          action: 'LANGUAGE_CHANGED',
+          entityType: 'language',
+          entityId: language,
+          after: { languageCode: language },
+        });
+      },
+      setSelectedLocale: (localeId) => {
+        const nextLocale = buildLocalePreferences({
+          locale: localeId,
+          timezone: localePreferences.timezone,
+        });
+        const nextLanguage = getBestSupportedLanguage(nextLocale.languageCode);
+        setLocalePreferences(nextLocale);
+        setSelectedLanguage(nextLanguage);
+        void emitDomainEvent({
+          eventName: 'LANGUAGE_CHANGED',
+          entityType: 'locale',
+          entityId: localeId,
+          metadata: {
+            locale: localeId,
+            languageCode: nextLocale.languageCode,
+            countryCode: nextLocale.countryCode,
+          },
+        });
+        void appendAuditEntry({
+          action: 'LOCALE_CHANGED',
+          entityType: 'locale',
+          entityId: localeId,
+          after: nextLocale,
+        });
+      },
+      setCountryCode: (countryCode) => {
+        setLocalePreferences((current) =>
+          buildLocalePreferences({
+            countryCode,
+            languageCode: current.languageCode,
+          })
+        );
+        void emitDomainEvent({
+          eventName: 'COUNTRY_CHANGED',
+          entityType: 'country',
+          entityId: countryCode,
+          metadata: { countryCode },
+        });
+        void appendAuditEntry({
+          action: 'COUNTRY_CHANGED',
+          entityType: 'country',
+          entityId: countryCode,
+          after: { countryCode },
+        });
+      },
+      updateLocalePreferences: (value) => {
+        setLocalePreferences((current) =>
+          buildLocalePreferences({
+            ...current,
+            ...value,
+          })
+        );
+      },
       dismissSuggestionUntil: (suggestionId, untilDate) => {
         setSuggestionDismissedUntil((prev) => ({
           ...prev,
@@ -304,6 +464,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     onboardingCompleted,
     onboardingProfile,
     reminderPreferences,
+    localePreferences,
+    selectedLanguage,
     suggestionDismissedUntil,
   ]);
 

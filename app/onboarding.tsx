@@ -1,13 +1,18 @@
+import { BrandLogo } from '@/components/BrandLogo';
+import { EmptyState } from '@/components/EmptyState';
 import { GeneratedSetupPreview } from '@/components/GeneratedSetupPreview';
+import { LifeBuddyAvatar } from '@/components/LifeBuddyAvatar';
 import { LifeBuddySetup } from '@/components/LifeBuddySetup';
-import { LifeBuddyRecommendations } from '@/components/LifeBuddyRecommendations';
 import { PageContainer } from '@/components/PageContainer';
-import { PageHeader } from '@/components/PageHeader';
 import { SectionCard } from '@/components/SectionCard';
 import { PersonTodo, SubtaskFrequency, useAppData } from '@/context/AppDataContext';
 import { ReminderPreferences, usePreferences } from '@/context/PreferencesContext';
 import { useTheme } from '@/context/ThemeContext';
+import { buildLocalePreferences } from '@/services/localeService';
 import { generateSetupFromSelections } from '@/services/ruleEngine';
+import { appendAuditEntry } from '@/services/auditLogService';
+import { emitDomainEvent } from '@/services/eventBus';
+import { categoryIconMap } from '@/src/design/icons';
 import { onboardingSteps } from '@/src/data/lifeLibrary';
 import {
   GeneratedOnboardingSetup,
@@ -15,8 +20,10 @@ import {
   OnboardingSelections,
   OnboardingStepId,
 } from '@/types/onboarding';
+import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   SafeAreaView,
@@ -27,13 +34,21 @@ import {
   View,
 } from 'react-native';
 
-function createEmptySelections(): OnboardingSelections {
+type OnboardingMode = 'welcome' | 'questions' | 'preview' | 'review' | 'success';
+
+function createEmptySelections(language: string, region: string, locale: string): OnboardingSelections {
   return {
+    locale: locale ? [locale] : [],
+    language: language ? [language] : [],
+    region: region ? [region] : [],
     roles: [],
+    lifeStages: [],
     relationships: [],
+    responsibilities: [],
     assets: [],
     interests: [],
     priorities: [],
+    currentFocus: [],
   };
 }
 
@@ -86,6 +101,7 @@ function clampPositiveInt(value: string, fallback: number): number {
 
 export default function OnboardingScreen() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const {
     categories,
     kpis,
@@ -98,22 +114,26 @@ export default function OnboardingScreen() {
     addPerson,
     addPersonTodo,
   } = useAppData();
-  const { setOnboardingCompleted, setOnboardingProfile, updateReminderPreference } = usePreferences();
+  const {
+    selectedLanguage,
+    selectedLocale,
+    localePreferences,
+    setOnboardingCompleted,
+    setOnboardingProfile,
+    setSelectedLocale,
+    updateReminderPreference,
+  } = usePreferences();
 
-  const [selections, setSelections] = useState<OnboardingSelections>(createEmptySelections);
+  const [mode, setMode] = useState<OnboardingMode>('welcome');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [generatedSetup, setGeneratedSetup] = useState<GeneratedOnboardingSetup | null>(null);
-  const [previewMode, setPreviewMode] = useState<'summary' | 'edit'>('summary');
-  const [postGenerationStage, setPostGenerationStage] = useState<'recommendations' | 'preview'>(
-    'recommendations'
-  );
-  const [isCustomizingRecommendations, setIsCustomizingRecommendations] = useState(false);
+  const [editableReview, setEditableReview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  const selectedCount = useMemo(
-    () => Object.values(selections).reduce((total, values) => total + values.length, 0),
-    [selections]
+  const [savedSetupSnapshot, setSavedSetupSnapshot] = useState<GeneratedOnboardingSetup | null>(null);
+  const [selections, setSelections] = useState<OnboardingSelections>(() =>
+    createEmptySelections(selectedLanguage, localePreferences.countryCode, selectedLocale)
   );
+
   const activeSetupForPreview = useMemo<GeneratedOnboardingSetup | null>(() => {
     if (!generatedSetup) return null;
 
@@ -129,26 +149,93 @@ export default function OnboardingScreen() {
     };
   }, [generatedSetup]);
 
-  const toggleOption = (stepId: OnboardingStepId, optionId: string) => {
-    setSelections((current) => {
-      const values = current[stepId];
-      const nextValues = values.includes(optionId)
-        ? values.filter((value) => value !== optionId)
-        : [...values, optionId];
+  const setupCounts = useMemo(() => {
+    const source = activeSetupForPreview ?? generatedSetup;
+    if (!source) {
+      return { categories: 0, kpis: 0, activities: 0, recommended: 0 };
+    }
 
-      return {
+    const kpiCount = source.categories.reduce((sum, category) => sum + category.kpis.length, 0);
+    const activities = source.categories.flatMap((category) =>
+      category.kpis.flatMap((kpi) => kpi.activities)
+    );
+
+    return {
+      categories: source.categories.length,
+      kpis: kpiCount,
+      activities: activities.length,
+      recommended: activities.filter((activity) => activity.recommended).length,
+    };
+  }, [activeSetupForPreview, generatedSetup]);
+
+  const selectedCount = onboardingSteps.reduce(
+    (sum, step) => sum + selections[step.id].length,
+    0
+  );
+
+  const updateGeneratedSetup = (
+    updater: (current: GeneratedOnboardingSetup) => GeneratedOnboardingSetup
+  ) => {
+    setGeneratedSetup((current) => (current ? updater(current) : current));
+  };
+
+  const toggleOption = (stepId: OnboardingStepId, optionId: string) => {
+    const step = onboardingSteps.find((item) => item.id === stepId);
+    const maxSelections = step?.maxSelections;
+
+    setSelections((current) => {
+      const currentValues = current[stepId];
+      const isSingleSelect = step?.singleSelect;
+      const exists = currentValues.includes(optionId);
+
+      let nextValues = currentValues;
+      if (isSingleSelect) {
+        nextValues = [optionId];
+      } else if (exists) {
+        nextValues = currentValues.filter((value) => value !== optionId);
+      } else if (maxSelections && currentValues.length >= maxSelections) {
+        nextValues = currentValues;
+      } else {
+        nextValues = [...currentValues, optionId];
+      }
+
+      let nextState: OnboardingSelections = {
         ...current,
         [stepId]: nextValues,
       };
+
+      if (stepId === 'language' || stepId === 'region') {
+        const nextLanguage =
+          stepId === 'language'
+            ? optionId
+            : current.language[0] || selectedLanguage;
+        const nextRegion =
+          stepId === 'region'
+            ? optionId
+            : current.region[0] || localePreferences.countryCode;
+        const locale = buildLocalePreferences({
+          languageCode: nextLanguage,
+          countryCode: nextRegion,
+        });
+
+        setSelectedLocale(locale.locale);
+        nextState = {
+          ...nextState,
+          language: [locale.languageCode],
+          region: [locale.countryCode],
+          locale: [locale.locale],
+        };
+      }
+
+      return nextState;
     });
   };
 
   const handleNextStep = () => {
     if (currentStepIndex === onboardingSteps.length - 1) {
       setGeneratedSetup(generateSetupFromSelections(selections));
-      setPreviewMode('summary');
-      setPostGenerationStage('recommendations');
-      setIsCustomizingRecommendations(false);
+      setMode('preview');
+      setEditableReview(false);
       return;
     }
 
@@ -162,28 +249,6 @@ export default function OnboardingScreen() {
   const handleSkip = () => {
     setOnboardingCompleted(true);
     router.replace('/(tabs)');
-  };
-
-  const updateGeneratedSetup = (
-    updater: (current: GeneratedOnboardingSetup) => GeneratedOnboardingSetup
-  ) => {
-    setGeneratedSetup((current) => (current ? updater(current) : current));
-  };
-
-  const updateActivitySelections = (selector: (activitySelected: boolean, recommended: boolean) => boolean) => {
-    updateGeneratedSetup((current) => ({
-      ...current,
-      categories: current.categories.map((category) => ({
-        ...category,
-        kpis: category.kpis.map((kpi) => ({
-          ...kpi,
-          activities: kpi.activities.map((activity) => ({
-            ...activity,
-            selected: selector(Boolean(activity.selected), Boolean(activity.recommended)),
-          })),
-        })),
-      })),
-    }));
   };
 
   const handleSaveSetup = async () => {
@@ -301,493 +366,686 @@ export default function OnboardingScreen() {
         personTodoKeys.add(todoKey);
       }
 
-      updateReminderPreference(
-        'kpiReminders',
-        generatedSetup.reminderPreferences.kpiReminders
-      );
+      updateReminderPreference('kpiReminders', generatedSetup.reminderPreferences.kpiReminders);
       updateReminderPreference(
         'relationshipReminders',
         generatedSetup.reminderPreferences.relationshipReminders
       );
-      updateReminderPreference(
-        'weeklyReview',
-        generatedSetup.reminderPreferences.weeklyReview
-      );
-      setOnboardingProfile(selections);
+      updateReminderPreference('weeklyReview', generatedSetup.reminderPreferences.weeklyReview);
+
+      const finalSelections: OnboardingSelections = {
+        ...selections,
+        language: selections.language.length ? selections.language : [selectedLanguage],
+        region: selections.region.length ? selections.region : [localePreferences.countryCode],
+        locale: [localePreferences.locale],
+      };
+
+      setOnboardingProfile(finalSelections);
       setOnboardingCompleted(true);
-      router.replace('/(tabs)');
+      setSavedSetupSnapshot(generatedSetup);
+
+      void emitDomainEvent({
+        eventName: 'ONBOARDING_COMPLETED',
+        entityType: 'onboarding',
+        entityId: 'onboarding',
+        metadata: {
+          selectedLocale: localePreferences.locale,
+          selectedLanguage,
+          selectedCountry: localePreferences.countryCode,
+          totalSelections: onboardingSteps.reduce(
+            (sum, step) => sum + finalSelections[step.id].length,
+            0
+          ),
+        },
+      });
+
+      void appendAuditEntry({
+        action: 'ONBOARDING_COMPLETED',
+        entityType: 'onboarding',
+        entityId: 'onboarding',
+        after: {
+          language: finalSelections.language,
+          region: finalSelections.region,
+          locale: finalSelections.locale,
+          lifeStages: finalSelections.lifeStages.length,
+          responsibilities: finalSelections.responsibilities.length,
+          assets: finalSelections.assets.length,
+          interests: finalSelections.interests.length,
+          currentFocus: finalSelections.currentFocus.length,
+        },
+      });
+
+      setMode('success');
     } catch (error) {
       console.error('Failed to save onboarding setup', error);
-      Alert.alert('Could not save setup', 'Please try again. Your generated setup is still here.');
+      Alert.alert(
+        t('onboarding.alerts.saveFailedTitle'),
+        t('onboarding.alerts.saveFailedMessage')
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
-  const pageContent = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-      <PageContainer>
-        <PageHeader
-          title="Life Buddy Onboarding"
-          subtitle="Choose who you are and what matters. Life Buddy will build the first version for you."
-          showSearch={false}
-        />
-
-        {!generatedSetup ? (
-          <>
-            <LifeBuddySetup
-              steps={onboardingSteps}
-              currentStepIndex={currentStepIndex}
-              selections={selections}
-              onToggleOption={toggleOption}
-              onBack={handleBackStep}
-              onNext={handleNextStep}
-              onSkip={handleSkip}
-            />
-
-            <SectionCard
-              style={{
-                backgroundColor: theme.secondaryBackground,
-                borderColor: theme.cardBorder,
-              }}>
-              <Text style={[styles.sideTitle, { color: theme.textPrimary }]}>
-                What Life Buddy will generate
-              </Text>
-              <Text style={[styles.sideText, { color: theme.textSecondary }]}>
-                Categories, KPIs, activities, and relationship trackers built from your selections.
-              </Text>
-              <Text style={[styles.sideText, { color: theme.textSecondary }]}>
-                {selectedCount > 0
-                  ? `${selectedCount} selections made so far.`
-                  : 'Make a few quick selections and Life Buddy will do the rest.'}
-              </Text>
-              <Text style={[styles.sideHint, { color: theme.textMuted }]}>
-                The goal is to finish in under three minutes and avoid manual KPI setup.
-              </Text>
-            </SectionCard>
-          </>
-        ) : (
-          <>
-            {postGenerationStage === 'recommendations' ? (
-              <LifeBuddyRecommendations
-                categories={generatedSetup.categories}
-                isCustomizing={isCustomizingRecommendations}
-                onActivateAllRecommended={() => {
-                  updateActivitySelections((_selected, recommended) => recommended);
-                  setPreviewMode('summary');
-                  setPostGenerationStage('preview');
-                  setIsCustomizingRecommendations(false);
-                }}
-                onStartCustomizing={() => setIsCustomizingRecommendations(true)}
-                onContinue={() => {
-                  setPreviewMode('summary');
-                  setPostGenerationStage('preview');
-                }}
-                onToggleActivity={(activityId) =>
-                  updateGeneratedSetup((current) => ({
-                    ...current,
-                    categories: current.categories.map((category) => ({
-                      ...category,
-                      kpis: category.kpis.map((kpi) => ({
-                        ...kpi,
-                        activities: kpi.activities.map((activity) =>
-                          activity.id === activityId
-                            ? {
-                                ...activity,
-                                selected: !activity.selected,
-                              }
-                            : activity
-                        ),
-                      })),
-                    })),
-                  }))
-                }
-              />
-            ) : (
-              <>
-                <SectionCard
-                  style={{
-                    backgroundColor: theme.secondaryBackground,
-                    borderColor: theme.cardBorder,
-                  }}>
-                  <Text style={[styles.reviewTitle, { color: theme.textPrimary }]}>
-                    {previewMode === 'edit' ? 'Editing your generated setup' : 'Review your generated setup'}
-                  </Text>
-                  <Text style={[styles.reviewText, { color: theme.textSecondary }]}>
-                    {previewMode === 'edit'
-                      ? 'Adjust categories, KPIs, activities, and relationship trackers before saving.'
-                      : 'Life Buddy generated this from your roles, relationships, assets, interests, and priorities.'}
-                  </Text>
-
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.primaryButton,
-                        {
-                          backgroundColor: theme.buttonPrimary,
-                          borderRadius: theme.borderRadius.md,
-                        },
-                      ]}
-                      onPress={handleSaveSetup}
-                      activeOpacity={0.85}
-                      disabled={isSaving}>
-                      <Text style={styles.primaryButtonText}>
-                        {isSaving ? 'Saving...' : 'Save Setup'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.cardBorder,
-                          borderRadius: theme.borderRadius.md,
-                        },
-                      ]}
-                      onPress={() => setPreviewMode((prev) => (prev === 'edit' ? 'summary' : 'edit'))}
-                      activeOpacity={0.85}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                        {previewMode === 'edit' ? 'Done Editing' : 'Edit Setup'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.cardBorder,
-                          borderRadius: theme.borderRadius.md,
-                        },
-                      ]}
-                      onPress={() => {
-                        setPostGenerationStage('recommendations');
-                        setIsCustomizingRecommendations(true);
-                      }}
-                      activeOpacity={0.85}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                        Recommendation Choices
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.cardBorder,
-                          borderRadius: theme.borderRadius.md,
-                        },
-                      ]}
-                      onPress={() => {
-                        setGeneratedSetup(null);
-                        setPreviewMode('summary');
-                        setPostGenerationStage('recommendations');
-                        setIsCustomizingRecommendations(false);
-                      }}
-                      activeOpacity={0.85}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                        Back to Selections
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </SectionCard>
-
-                <GeneratedSetupPreview
-                  setup={activeSetupForPreview ?? generatedSetup}
-                  editable={previewMode === 'edit'}
-                  onChangeSummary={(value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      summary: value,
-                    }))
-                  }
-                  onUpdateCategoryName={(categoryId, value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              name: value,
-                              kpis: category.kpis.map((kpi) => ({
-                                ...kpi,
-                                categoryName: value,
-                              })),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onDeleteCategory={(categoryId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.filter((category) => category.id !== categoryId),
-                    }))
-                  }
-                  onAddCategory={() =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: [
-                        ...current.categories,
-                        {
-                          id: makeId('category'),
-                          name: 'New Category',
-                          kpis: [],
-                        },
-                      ],
-                    }))
-                  }
-                  onAddKpi={(categoryId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: [
-                                ...category.kpis,
-                                {
-                                  id: makeId('kpi'),
-                                  name: 'New KPI',
-                                  categoryName: category.name,
-                                  target: 1,
-                                  unit: 'times/week',
-                                  weight: 5,
-                                  activities: [],
-                                },
-                              ],
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onUpdateKpi={(categoryId, kpiId, field, value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: category.kpis.map((kpi) =>
-                                kpi.id === kpiId
-                                  ? {
-                                      ...kpi,
-                                      [field]:
-                                        field === 'target' || field === 'weight'
-                                          ? clampPositiveInt(value, 1)
-                                          : value,
-                                    }
-                                  : kpi
-                              ),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onDeleteKpi={(categoryId, kpiId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: category.kpis.filter((kpi) => kpi.id !== kpiId),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onAddActivity={(categoryId, kpiId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: category.kpis.map((kpi) =>
-                                kpi.id === kpiId
-                                  ? {
-                                      ...kpi,
-                                      activities: [
-                                        ...kpi.activities,
-                                        {
-                                          id: makeId('activity'),
-                                          name: 'New Activity',
-                                          frequency: 'weekly',
-                                          targetCount: 1,
-                                          recommended: false,
-                                          importanceScore: 5,
-                                          defaultFrequency: 'weekly',
-                                          reason: 'Manual selection',
-                                          selected: true,
-                                        },
-                                      ],
-                                    }
-                                  : kpi
-                              ),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onUpdateActivity={(categoryId, kpiId, activityId, field, value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: category.kpis.map((kpi) =>
-                                kpi.id === kpiId
-                                  ? {
-                                      ...kpi,
-                                      activities: kpi.activities.map((activity) =>
-                                        activity.id === activityId
-                                          ? {
-                                              ...activity,
-                                              [field]:
-                                                field === 'targetCount'
-                                                  ? clampPositiveInt(value, 1)
-                                                  : field === 'frequency'
-                                                    ? normalizeSubtaskFrequency(value)
-                                                    : value,
-                                            }
-                                          : activity
-                                      ),
-                                    }
-                                  : kpi
-                              ),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onDeleteActivity={(categoryId, kpiId, activityId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      categories: current.categories.map((category) =>
-                        category.id === categoryId
-                          ? {
-                              ...category,
-                              kpis: category.kpis.map((kpi) =>
-                                kpi.id === kpiId
-                                  ? {
-                                      ...kpi,
-                                      activities: kpi.activities.filter(
-                                        (activity) => activity.id !== activityId
-                                      ),
-                                    }
-                                  : kpi
-                              ),
-                            }
-                          : category
-                      ),
-                    }))
-                  }
-                  onUpdateReminderPreference={(key, value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      reminderPreferences: {
-                        ...current.reminderPreferences,
-                        [key]: value,
-                      } satisfies ReminderPreferences,
-                    }))
-                  }
-                  onAddRelationship={() =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      relationships: [
-                        ...current.relationships,
-                        {
-                          id: makeId('relationship'),
-                          name: 'Important Person',
-                          relationshipType: 'Other',
-                          groupName: 'Other',
-                          frequency: 'weekly',
-                          todoTitle: 'Check In',
-                        },
-                      ],
-                    }))
-                  }
-                  onUpdateRelationship={(relationshipId, field, value) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      relationships: current.relationships.map((relationship) =>
-                        relationship.id === relationshipId
-                          ? {
-                              ...relationship,
-                              [field]:
-                                field === 'frequency'
-                                  ? normalizeFrequency(value)
-                                  : value,
-                            }
-                          : relationship
-                      ),
-                    }))
-                  }
-                  onDeleteRelationship={(relationshipId) =>
-                    updateGeneratedSetup((current) => ({
-                      ...current,
-                      relationships: current.relationships.filter(
-                        (relationship) => relationship.id !== relationshipId
-                      ),
-                    }))
-                  }
-                />
-              </>
-            )}
-          </>
-        )}
-      </PageContainer>
-    </ScrollView>
-  );
+  const previewCategories = (activeSetupForPreview ?? generatedSetup)?.categories ?? [];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {pageContent}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <PageContainer>
+          {mode === 'welcome' ? (
+            <SectionCard
+              style={[
+                styles.heroCard,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                },
+              ]}>
+              <View style={styles.heroLogoWrap}>
+                <BrandLogo size={84} />
+              </View>
+              <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>Welcome to Life KPI</Text>
+              <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
+                Build a life system that helps you track, review, and improve what matters.
+              </Text>
+
+              <View style={styles.heroActionColumn}>
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    {
+                      backgroundColor: theme.buttonPrimary,
+                      borderRadius: theme.borderRadius.md,
+                    },
+                  ]}
+                  onPress={() => setMode('questions')}
+                  activeOpacity={0.85}>
+                  <Text style={styles.primaryButtonText}>{t('common.continue')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: theme.buttonSecondary,
+                      borderColor: theme.cardBorder,
+                      borderRadius: theme.borderRadius.md,
+                    },
+                  ]}
+                  onPress={handleSkip}
+                  activeOpacity={0.85}>
+                  <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                    {t('common.skipForNow')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </SectionCard>
+          ) : null}
+
+          {mode === 'questions' ? (
+            <>
+              <View style={styles.questionHeader}>
+                <Text style={[styles.eyebrow, { color: theme.primary }]}>Life Buddy Setup</Text>
+                <Text style={[styles.questionTitle, { color: theme.textPrimary }]}>
+                  One calm decision at a time.
+                </Text>
+                <Text style={[styles.questionSubtitle, { color: theme.textSecondary }]}>
+                  Pick the pieces that match your life. Life Buddy will build the first system for you.
+                </Text>
+              </View>
+
+              <LifeBuddySetup
+                steps={onboardingSteps}
+                currentStepIndex={currentStepIndex}
+                selections={selections}
+                onToggleOption={toggleOption}
+                onBack={handleBackStep}
+                onNext={handleNextStep}
+                onSkip={handleSkip}
+              />
+
+              <SectionCard
+                style={{
+                  backgroundColor: theme.secondaryBackground,
+                  borderColor: theme.cardBorder,
+                }}>
+                <Text style={[styles.sideTitle, { color: theme.textPrimary }]}>Starter system preview</Text>
+                <Text style={[styles.sideText, { color: theme.textSecondary }]}>
+                  {selectedCount > 0
+                    ? `${selectedCount} choices made so far.`
+                    : 'Make a few quick choices and Life Buddy will do the heavy lifting.'}
+                </Text>
+                <Text style={[styles.sideHint, { color: theme.textMuted }]}>
+                  Categories, KPIs, activities, and relationship trackers are generated after the last step.
+                </Text>
+              </SectionCard>
+            </>
+          ) : null}
+
+          {mode === 'preview' && generatedSetup ? (
+            <>
+              <SectionCard
+                style={{
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                }}>
+                <View style={styles.previewHeader}>
+                  <LifeBuddyAvatar size={64} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.previewTitle, { color: theme.textPrimary }]}>
+                      Life Buddy built your starter system
+                    </Text>
+                    <Text style={[styles.previewSubtitle, { color: theme.textSecondary }]}>
+                      A calmer start, with structure already in place.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.statsGrid}>
+                  <View style={[styles.statCard, { backgroundColor: theme.secondaryBackground, borderColor: theme.cardBorder }]}>
+                    <Text style={[styles.statValue, { color: theme.textPrimary }]}>{setupCounts.categories}</Text>
+                    <Text style={[styles.statLabel, { color: theme.textMuted }]}>Categories</Text>
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: theme.secondaryBackground, borderColor: theme.cardBorder }]}>
+                    <Text style={[styles.statValue, { color: theme.textPrimary }]}>{setupCounts.kpis}</Text>
+                    <Text style={[styles.statLabel, { color: theme.textMuted }]}>KPIs</Text>
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: theme.secondaryBackground, borderColor: theme.cardBorder }]}>
+                    <Text style={[styles.statValue, { color: theme.textPrimary }]}>{setupCounts.activities}</Text>
+                    <Text style={[styles.statLabel, { color: theme.textMuted }]}>Activities</Text>
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: theme.secondaryBackground, borderColor: theme.cardBorder }]}>
+                    <Text style={[styles.statValue, { color: theme.textPrimary }]}>{setupCounts.recommended}</Text>
+                    <Text style={[styles.statLabel, { color: theme.textMuted }]}>Recommended</Text>
+                  </View>
+                </View>
+
+                <View style={styles.categorySummaryGrid}>
+                  {previewCategories.map((category) => {
+                    const activityCount = category.kpis.reduce(
+                      (sum, kpi) => sum + kpi.activities.length,
+                      0
+                    );
+                    return (
+                      <View
+                        key={category.id}
+                        style={[
+                          styles.categorySummaryCard,
+                          {
+                            backgroundColor: theme.secondaryBackground,
+                            borderColor: theme.cardBorder,
+                          },
+                        ]}>
+                        <View
+                          style={[
+                            styles.categoryIconWrap,
+                            {
+                              backgroundColor: theme.inputBackground,
+                              borderColor: theme.cardBorder,
+                            },
+                          ]}>
+                          <MaterialIcons
+                            name={(categoryIconMap[category.name] || 'insights') as never}
+                            size={20}
+                            color={theme.primary}
+                          />
+                        </View>
+                        <Text style={[styles.categorySummaryTitle, { color: theme.textPrimary }]}>
+                          {category.name}
+                        </Text>
+                        <Text style={[styles.categorySummaryMeta, { color: theme.textSecondary }]}>
+                          {`${category.kpis.length} KPIs`}
+                        </Text>
+                        <Text style={[styles.categorySummaryMeta, { color: theme.textSecondary }]}>
+                          {`${activityCount} Activities`}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton,
+                      {
+                        backgroundColor: theme.buttonPrimary,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={() => setMode('review')}
+                    activeOpacity={0.85}>
+                    <Text style={styles.primaryButtonText}>Review & Customize</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={() => {
+                      setGeneratedSetup(null);
+                      setMode('questions');
+                    }}
+                    activeOpacity={0.85}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      Back
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </SectionCard>
+            </>
+          ) : null}
+
+          {mode === 'review' && generatedSetup ? (
+            <>
+              <SectionCard
+                style={{
+                  backgroundColor: theme.secondaryBackground,
+                  borderColor: theme.cardBorder,
+                }}>
+                <Text style={[styles.reviewTitle, { color: theme.textPrimary }]}>
+                  Review & Customize
+                </Text>
+                <Text style={[styles.reviewText, { color: theme.textSecondary }]}>
+                  Adjust names, remove anything unnecessary, and keep the best starting version.
+                </Text>
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton,
+                      {
+                        backgroundColor: theme.buttonPrimary,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={handleSaveSetup}
+                    activeOpacity={0.85}
+                    disabled={isSaving}>
+                    <Text style={styles.primaryButtonText}>
+                      {isSaving ? t('onboarding.saving') : 'Save My Life System'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={() => setEditableReview((prev) => !prev)}
+                    activeOpacity={0.85}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      {editableReview ? 'Done Editing' : 'Edit'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.md,
+                      },
+                    ]}
+                    onPress={() => setMode('preview')}
+                    activeOpacity={0.85}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      Back
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </SectionCard>
+
+              <GeneratedSetupPreview
+                setup={activeSetupForPreview ?? generatedSetup}
+                editable={editableReview}
+                onChangeSummary={(value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    summary: value,
+                  }))
+                }
+                onUpdateCategoryName={(categoryId, value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            name: value,
+                            kpis: category.kpis.map((kpi) => ({
+                              ...kpi,
+                              categoryName: value,
+                            })),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onDeleteCategory={(categoryId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.filter((category) => category.id !== categoryId),
+                  }))
+                }
+                onAddCategory={() =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: [
+                      ...current.categories,
+                      {
+                        id: makeId('category'),
+                        name: 'New Category',
+                        kpis: [],
+                      },
+                    ],
+                  }))
+                }
+                onAddKpi={(categoryId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: [
+                              ...category.kpis,
+                              {
+                                id: makeId('kpi'),
+                                name: 'New KPI',
+                                categoryName: category.name,
+                                target: 1,
+                                unit: 'times/week',
+                                weight: 5,
+                                activities: [],
+                              },
+                            ],
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onUpdateKpi={(categoryId, kpiId, field, value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: category.kpis.map((kpi) =>
+                              kpi.id === kpiId
+                                ? {
+                                    ...kpi,
+                                    [field]:
+                                      field === 'target' || field === 'weight'
+                                        ? clampPositiveInt(value, 1)
+                                        : value,
+                                  }
+                                : kpi
+                            ),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onDeleteKpi={(categoryId, kpiId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: category.kpis.filter((kpi) => kpi.id !== kpiId),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onAddActivity={(categoryId, kpiId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: category.kpis.map((kpi) =>
+                              kpi.id === kpiId
+                                ? {
+                                    ...kpi,
+                                    activities: [
+                                      ...kpi.activities,
+                                      {
+                                        id: makeId('activity'),
+                                        name: 'New Activity',
+                                        frequency: 'weekly',
+                                        targetCount: 1,
+                                        recommended: false,
+                                        importanceScore: 5,
+                                        defaultFrequency: 'weekly',
+                                        reason: 'Manual selection',
+                                        selected: true,
+                                      },
+                                    ],
+                                  }
+                                : kpi
+                            ),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onUpdateActivity={(categoryId, kpiId, activityId, field, value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: category.kpis.map((kpi) =>
+                              kpi.id === kpiId
+                                ? {
+                                    ...kpi,
+                                    activities: kpi.activities.map((activity) =>
+                                      activity.id === activityId
+                                        ? {
+                                            ...activity,
+                                            [field]:
+                                              field === 'targetCount'
+                                                ? clampPositiveInt(value, 1)
+                                                : field === 'frequency'
+                                                  ? normalizeSubtaskFrequency(value)
+                                                  : value,
+                                          }
+                                        : activity
+                                    ),
+                                  }
+                                : kpi
+                            ),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onDeleteActivity={(categoryId, kpiId, activityId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    categories: current.categories.map((category) =>
+                      category.id === categoryId
+                        ? {
+                            ...category,
+                            kpis: category.kpis.map((kpi) =>
+                              kpi.id === kpiId
+                                ? {
+                                    ...kpi,
+                                    activities: kpi.activities.filter(
+                                      (activity) => activity.id !== activityId
+                                    ),
+                                  }
+                                : kpi
+                            ),
+                          }
+                        : category
+                    ),
+                  }))
+                }
+                onUpdateReminderPreference={(key, value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    reminderPreferences: {
+                      ...current.reminderPreferences,
+                      [key]: value,
+                    } satisfies ReminderPreferences,
+                  }))
+                }
+                onAddRelationship={() =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    relationships: [
+                      ...current.relationships,
+                      {
+                        id: makeId('relationship'),
+                        name: 'Important Person',
+                        relationshipType: 'Other',
+                        groupName: 'Other',
+                        frequency: 'weekly',
+                        todoTitle: 'Check In',
+                      },
+                    ],
+                  }))
+                }
+                onUpdateRelationship={(relationshipId, field, value) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    relationships: current.relationships.map((relationship) =>
+                      relationship.id === relationshipId
+                        ? {
+                            ...relationship,
+                            [field]:
+                              field === 'frequency' ? normalizeFrequency(value) : value,
+                          }
+                        : relationship
+                    ),
+                  }))
+                }
+                onDeleteRelationship={(relationshipId) =>
+                  updateGeneratedSetup((current) => ({
+                    ...current,
+                    relationships: current.relationships.filter(
+                      (relationship) => relationship.id !== relationshipId
+                    ),
+                  }))
+                }
+              />
+            </>
+          ) : null}
+
+          {mode === 'success' ? (
+            <SectionCard
+              style={[
+                styles.heroCard,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                },
+              ]}>
+              <View style={styles.heroLogoWrap}>
+                <LifeBuddyAvatar size={84} />
+              </View>
+              <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>Your Life System is Ready</Text>
+              <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
+                Life Buddy prepared your first categories, KPIs, and responsibilities.
+              </Text>
+
+              {savedSetupSnapshot ? (
+                <Text style={[styles.successMeta, { color: theme.textMuted }]}>
+                  {`${savedSetupSnapshot.categories.length} categories, ${setupCounts.kpis} KPIs, ${setupCounts.activities} activities`}
+                </Text>
+              ) : null}
+
+              <View style={styles.heroActionColumn}>
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    {
+                      backgroundColor: theme.buttonPrimary,
+                      borderRadius: theme.borderRadius.md,
+                    },
+                  ]}
+                  onPress={() => router.replace('/(tabs)')}
+                  activeOpacity={0.85}>
+                  <Text style={styles.primaryButtonText}>Open My Dashboard</Text>
+                </TouchableOpacity>
+              </View>
+            </SectionCard>
+          ) : null}
+
+          {mode === 'preview' && !generatedSetup ? (
+            <EmptyState
+              title="Nothing generated yet"
+              subtitle="Finish the setup steps first and Life Buddy will build your starter system."
+            />
+          ) : null}
+        </PageContainer>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  reviewTitle: {
-    fontSize: 18,
+  heroCard: {
+    alignItems: 'center',
+    paddingVertical: 36,
+  },
+  heroLogoWrap: {
+    marginBottom: 20,
+  },
+  heroTitle: {
+    fontSize: 30,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    maxWidth: 520,
+  },
+  heroActionColumn: {
+    width: '100%',
+    maxWidth: 320,
+    gap: 10,
+    marginTop: 24,
+  },
+  questionHeader: {
+    marginBottom: 18,
+  },
+  eyebrow: {
+    fontSize: 12,
     fontWeight: '800',
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
-  reviewText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 14,
+  questionTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    marginBottom: 8,
   },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  primaryButton: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButton: {
-    minHeight: 44,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
+  questionSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 620,
   },
   sideTitle: {
     fontSize: 16,
@@ -802,5 +1060,116 @@ const styles = StyleSheet.create({
   sideHint: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 18,
+  },
+  previewTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  previewSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 18,
+  },
+  statCard: {
+    minWidth: 132,
+    flexGrow: 1,
+    borderWidth: 1,
+    padding: 14,
+    borderRadius: 18,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  categorySummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 18,
+  },
+  categorySummaryCard: {
+    width: 176,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    gap: 6,
+  },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  categorySummaryTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  categorySummaryMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reviewTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  reviewText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  primaryButton: {
+    minHeight: 46,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  successMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+    textAlign: 'center',
   },
 });
