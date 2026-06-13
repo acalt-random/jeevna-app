@@ -1,30 +1,35 @@
+import React, { useMemo, useState } from 'react';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+
+import { CategoryCard } from '@/components/CategoryCard';
+import { CategoryGrid } from '@/components/CategoryGrid';
 import { DesktopShell } from '@/components/DesktopShell';
 import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
-import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
-import { SectionCard } from '@/components/SectionCard';
 import { useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useDeviceType } from '@/hooks/useDeviceType';
-import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+
+type CategoryCardViewModel = {
+  id: string;
+  name: string;
+  score: number | null;
+  kpiCount: number;
+  topKpis: {
+    id: string;
+    name: string;
+    target: number;
+    unit: string;
+    latestActual: string | null;
+    progress: number | null;
+  }[];
+};
 
 export default function CategoryManagerScreen() {
   const { categories, kpis, entries, latestActuals, addCategory, updateCategory, deleteCategory } =
     useAppData();
   const { theme } = useTheme();
-  const deviceType = useDeviceType();
   const router = useRouter();
 
   const [categoryName, setCategoryName] = useState('');
@@ -38,13 +43,13 @@ export default function CategoryManagerScreen() {
     return latestEntry?.actuals ?? latestActuals;
   }, [entries, latestActuals]);
 
-  const categoryCards = useMemo(() => {
+  const categoryCards = useMemo<CategoryCardViewModel[]>(() => {
     return categories.map((category) => {
       const categoryKpis = kpis.filter((kpi) => kpi.category === category.name);
       const totalWeight = categoryKpis.reduce((sum, kpi) => sum + kpi.weight, 0);
       const scoredWeight = categoryKpis.reduce((sum, kpi) => {
         const rawActual = latestEntryActuals[kpi.id];
-        const parsedActual = parseFloat(rawActual || '0');
+        const parsedActual = Number.parseFloat(rawActual || '0');
         const safeActual = Number.isNaN(parsedActual) ? 0 : parsedActual;
         const contribution =
           kpi.target > 0 ? Math.min(kpi.weight, (safeActual / kpi.target) * kpi.weight) : 0;
@@ -52,23 +57,31 @@ export default function CategoryManagerScreen() {
       }, 0);
 
       const score = totalWeight > 0 ? Math.round((scoredWeight / totalWeight) * 100) : null;
+
       const topKpis = categoryKpis.slice(0, 3).map((kpi) => {
         const latestActual = latestEntryActuals[kpi.id];
-        const parsedActual = parseFloat(latestActual || '0');
+        const parsedActual = Number.parseFloat(latestActual || '0');
         const progress =
-          latestActual !== undefined && latestActual !== '' && !Number.isNaN(parsedActual) && kpi.target > 0
+          latestActual !== undefined &&
+          latestActual !== '' &&
+          !Number.isNaN(parsedActual) &&
+          kpi.target > 0
             ? Math.min(100, Math.round((parsedActual / kpi.target) * 100))
             : null;
 
         return {
-          ...kpi,
+          id: kpi.id,
+          name: kpi.name,
+          target: kpi.target,
+          unit: kpi.unit,
           latestActual: latestActual ?? null,
           progress,
         };
       });
 
       return {
-        ...category,
+        id: category.id,
+        name: category.name,
         score,
         kpiCount: categoryKpis.length,
         topKpis,
@@ -121,6 +134,13 @@ export default function CategoryManagerScreen() {
     }
   };
 
+  const openCategory = (name: string) => {
+    router.push({
+      pathname: '/category/[categoryName]',
+      params: { categoryName: name },
+    });
+  };
+
   const pageContent = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
       <PageContainer>
@@ -153,136 +173,99 @@ export default function CategoryManagerScreen() {
             message="Create your first category to organize your KPIs."
           />
         ) : (
-          <ResponsiveGrid gap={14}>
-            {categoryCards.map((category) => (
-              <ResponsiveGridItem
-                key={category.id}
-                mobileSpan={1}
-                tabletSpan={3}
-                desktopSpan={4}>
-                <SectionCard>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/category/[categoryName]',
-                        params: { categoryName: category.name },
-                      })
-                    }>
-                    <View style={styles.categoryHeader}>
-                      <View style={{ flex: 1, paddingRight: 10 }}>
-                        <Text style={[styles.categoryName, { color: theme.textPrimary }]}>
-                          {category.name}
-                        </Text>
-                        <Text style={[styles.categoryMeta, { color: theme.textSecondary }]}>
-                          {category.kpiCount} KPI{category.kpiCount === 1 ? '' : 's'}
+          <CategoryGrid
+            items={categoryCards}
+            keyExtractor={(category) => category.id}
+            renderItem={(category) => (
+              <CategoryCard
+                title={category.name}
+                subtitle={`${category.kpiCount} KPI${category.kpiCount === 1 ? '' : 's'}`}
+                score={category.score}
+                badgeText={category.topKpis.length === 0 ? 'Empty' : 'Tracking'}
+                onPress={() => openCategory(category.name)}>
+                {category.topKpis.length === 0 ? (
+                  <Text style={[styles.emptyCategoryText, { color: theme.textSecondary }]}>
+                    No KPIs yet. Add one to start tracking this area.
+                  </Text>
+                ) : (
+                  <View style={styles.kpiPreviewList}>
+                    {category.topKpis.map((kpi) => (
+                      <View
+                        key={kpi.id}
+                        style={[styles.kpiPreviewRow, { borderBottomColor: theme.cardBorder }]}>
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text style={[styles.kpiPreviewName, { color: theme.textPrimary }]}>
+                            {kpi.name}
+                          </Text>
+                          <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
+                            Target: {kpi.target} {kpi.unit}
+                          </Text>
+                          <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
+                            Latest actual:{' '}
+                            {kpi.latestActual ? `${kpi.latestActual} ${kpi.unit}` : 'No entries yet'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.kpiPreviewScore, { color: theme.primary }]}>
+                          {kpi.progress !== null ? `${kpi.progress}%` : '—'}
                         </Text>
                       </View>
-                      <Text style={[styles.categoryScore, { color: theme.primary }]}>
-                        {category.score !== null ? `${category.score}/100` : '—'}
-                      </Text>
-                    </View>
-
-                    {category.topKpis.length === 0 ? (
-                      <Text style={[styles.emptyCategoryText, { color: theme.textSecondary }]}>
-                        No KPIs yet. Add one to start tracking this area.
-                      </Text>
-                    ) : (
-                      <View style={styles.kpiPreviewList}>
-                        {category.topKpis.map((kpi) => (
-                          <View
-                            key={kpi.id}
-                            style={[styles.kpiPreviewRow, { borderBottomColor: theme.cardBorder }]}>
-                            <View style={{ flex: 1, paddingRight: 8 }}>
-                              <Text style={[styles.kpiPreviewName, { color: theme.textPrimary }]}>
-                                {kpi.name}
-                              </Text>
-                              <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
-                                Target: {kpi.target} {kpi.unit}
-                              </Text>
-                              <Text style={[styles.kpiPreviewMeta, { color: theme.textSecondary }]}>
-                                Latest actual:{' '}
-                                {kpi.latestActual ? `${kpi.latestActual} ${kpi.unit}` : 'No entries yet'}
-                              </Text>
-                            </View>
-                            <Text style={[styles.kpiPreviewScore, { color: theme.primary }]}>
-                              {kpi.progress !== null ? `${kpi.progress}%` : '—'}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.cardBorder,
-                          borderRadius: theme.borderRadius.sm,
-                        },
-                      ]}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/category/[categoryName]',
-                          params: { categoryName: category.name },
-                        })
-                      }
-                      activeOpacity={0.8}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                        View all KPIs
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.cardBorder,
-                          borderRadius: theme.borderRadius.sm,
-                        },
-                      ]}
-                      onPress={() => handleStartEdit(category)}
-                      activeOpacity={0.8}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-                        Edit
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: theme.buttonSecondary,
-                          borderColor: theme.danger,
-                          borderRadius: theme.borderRadius.sm,
-                        },
-                      ]}
-                      onPress={() => handleDeleteCategory(category.id)}
-                      activeOpacity={0.8}>
-                      <Text style={[styles.secondaryButtonText, { color: theme.danger }]}>
-                        Delete
-                      </Text>
-                    </TouchableOpacity>
+                    ))}
                   </View>
-                </SectionCard>
-              </ResponsiveGridItem>
-            ))}
-          </ResponsiveGrid>
+                )}
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.sm,
+                      },
+                    ]}
+                    onPress={() => openCategory(category.name)}
+                    activeOpacity={0.8}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      View all KPIs
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.cardBorder,
+                        borderRadius: theme.borderRadius.sm,
+                      },
+                    ]}
+                    onPress={() => handleStartEdit(category)}
+                    activeOpacity={0.8}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                      Edit
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: theme.buttonSecondary,
+                        borderColor: theme.danger,
+                        borderRadius: theme.borderRadius.sm,
+                      },
+                    ]}
+                    onPress={() => handleDeleteCategory(category.id)}
+                    activeOpacity={0.8}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.danger }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </CategoryCard>
+            )}
+          />
         )}
 
-        <Modal
-          visible={isFormOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={clearForm}>
+        <Modal visible={isFormOpen} transparent animationType="fade" onRequestClose={clearForm}>
           <View style={styles.modalOverlay}>
-            <TouchableOpacity
-              style={styles.modalBackdrop}
-              activeOpacity={1}
-              onPress={clearForm}
-            />
+            <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={clearForm} />
             <View
               style={[
                 styles.formModalCard,
@@ -349,11 +332,7 @@ export default function CategoryManagerScreen() {
     </ScrollView>
   );
 
-  if (deviceType === 'desktop') {
-    return <DesktopShell title="Categories">{pageContent}</DesktopShell>;
-  }
-
-  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>{pageContent}</SafeAreaView>;
+  return <DesktopShell title="Categories">{pageContent}</DesktopShell>;
 }
 
 const styles = StyleSheet.create({
@@ -372,25 +351,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 12,
-  },
-  categoryName: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  categoryMeta: {
-    fontSize: 14,
-  },
-  categoryScore: {
-    fontSize: 16,
-    fontWeight: '800',
   },
   emptyCategoryText: {
     fontSize: 14,
@@ -471,13 +431,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   input: {
+    minHeight: 48,
     borderWidth: 1,
-    padding: 12,
-    fontSize: 15,
+    paddingHorizontal: 14,
     marginBottom: 14,
+    fontSize: 15,
   },
   modalActionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
 });

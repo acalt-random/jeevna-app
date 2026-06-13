@@ -1,4 +1,6 @@
 import { Category, KPI, Subtask, SubtaskLog, SubtaskFrequency } from '@/context/AppDataContext';
+import { getNextScheduledDate, getOccurrencesInRange } from '@/services/scheduleEngine';
+import { ActivitySchedule } from '@/types/schedule';
 
 export type ActivityStatus = 'Not Started' | 'Due' | 'Completed' | 'Missed' | 'Rescheduled';
 
@@ -86,6 +88,10 @@ function completedDatesForSubtask(subtaskId: string, subtaskLogs: SubtaskLog[]):
     .sort((left, right) => left.localeCompare(right));
 }
 
+function completedDatesUntil(subtaskId: string, subtaskLogs: SubtaskLog[], throughDate: string): string[] {
+  return completedDatesForSubtask(subtaskId, subtaskLogs).filter((date) => date <= throughDate);
+}
+
 function scoreForResponsibility(item: ResponsibilityItem): number {
   if (item.isOverdue) return 0;
   if (item.isCompletedToday) return item.status === 'Rescheduled' ? 85 : 100;
@@ -98,12 +104,100 @@ function buildResponsibilityItem(
   categoryName: string,
   kpiName: string,
   subtaskLogs: SubtaskLog[],
-  today: string
+  today: string,
+  schedule?: ActivitySchedule
 ): ResponsibilityItem {
-  const completedDates = completedDatesForSubtask(subtask.id, subtaskLogs);
+  const completedDates = completedDatesUntil(subtask.id, subtaskLogs, today);
   const completedToday = completedDates.includes(today);
   const lastCompletedDate = completedDates.length > 0 ? completedDates[completedDates.length - 1] : undefined;
   const lastCompletedBeforeToday = completedDates.filter((date) => date < today).slice(-1)[0];
+
+  if (schedule?.enabled) {
+    const dueOccurrences = getOccurrencesInRange(schedule, schedule.startDate, today);
+    const latestDueDate = dueOccurrences[dueOccurrences.length - 1];
+    if (completedToday) {
+      const wasOverdueBeforeCompletion =
+        latestDueDate !== undefined && latestDueDate < today && !dueOccurrences.includes(lastCompletedBeforeToday ?? '');
+
+      return {
+        id: `responsibility:${subtask.id}`,
+        subtaskId: subtask.id,
+        title: subtask.name,
+        category: categoryName,
+        kpiName,
+        frequency: subtask.frequency,
+        targetCount: subtask.targetCount,
+        status: wasOverdueBeforeCompletion ? 'Rescheduled' : 'Completed',
+        dueDate: latestDueDate ?? today,
+        lastCompletedDate,
+        completedDate: today,
+        daysOverdue: 0,
+        isDueToday: false,
+        isOverdue: false,
+        isCompletedToday: true,
+      };
+    }
+
+    if (latestDueDate && latestDueDate < today) {
+      const completedForLatestDue = completedDates.includes(latestDueDate);
+      if (!completedForLatestDue) {
+        return {
+          id: `responsibility:${subtask.id}`,
+          subtaskId: subtask.id,
+          title: subtask.name,
+          category: categoryName,
+          kpiName,
+          frequency: subtask.frequency,
+          targetCount: subtask.targetCount,
+          status: 'Missed',
+          dueDate: latestDueDate,
+          lastCompletedDate,
+          daysOverdue: daysBetween(latestDueDate, today),
+          isDueToday: false,
+          isOverdue: true,
+          isCompletedToday: false,
+        };
+      }
+    }
+
+    const isDueToday = dueOccurrences.includes(today);
+    if (isDueToday) {
+      return {
+        id: `responsibility:${subtask.id}`,
+        subtaskId: subtask.id,
+        title: subtask.name,
+        category: categoryName,
+        kpiName,
+        frequency: subtask.frequency,
+        targetCount: subtask.targetCount,
+        status: lastCompletedDate ? 'Due' : 'Not Started',
+        dueDate: today,
+        lastCompletedDate,
+        daysOverdue: 0,
+        isDueToday: true,
+        isOverdue: false,
+        isCompletedToday: false,
+      };
+    }
+
+    const nextDueDate = getNextScheduledDate(schedule, today);
+    return {
+      id: `responsibility:${subtask.id}`,
+      subtaskId: subtask.id,
+      title: subtask.name,
+      category: categoryName,
+      kpiName,
+      frequency: subtask.frequency,
+      targetCount: subtask.targetCount,
+      status: 'Not Started',
+      dueDate: nextDueDate,
+      lastCompletedDate,
+      daysOverdue: 0,
+      isDueToday: false,
+      isOverdue: false,
+      isCompletedToday: false,
+    };
+  }
 
   // Custom activities do not yet have an interval model, so in v1 they are treated as
   // "check today" responsibilities until a richer scheduler exists.
@@ -234,18 +328,31 @@ export function buildResponsibilitySnapshot(params: {
   kpis: KPI[];
   subtasks: Subtask[];
   subtaskLogs: SubtaskLog[];
+  activitySchedules?: ActivitySchedule[];
   today?: string;
 }): ResponsibilitySnapshot {
-  const { categories, kpis, subtasks, subtaskLogs, today = todayYMD() } = params;
+  const { categories, kpis, subtasks, subtaskLogs, activitySchedules = [], today = todayYMD() } = params;
 
   const kpiById = new Map(kpis.map((kpi) => [kpi.id, kpi]));
+  const scheduleByActivityId = new Map(
+    activitySchedules
+      .filter((schedule) => schedule.enabled)
+      .map((schedule) => [schedule.activityId, schedule])
+  );
 
   const all = subtasks
     .map((subtask) => {
       const kpi = kpiById.get(subtask.kpiId);
       if (!kpi) return null;
 
-      return buildResponsibilityItem(subtask, kpi.category, kpi.name, subtaskLogs, today);
+      return buildResponsibilityItem(
+        subtask,
+        kpi.category,
+        kpi.name,
+        subtaskLogs,
+        today,
+        scheduleByActivityId.get(subtask.id)
+      );
     })
     .filter((item): item is ResponsibilityItem => item !== null);
 

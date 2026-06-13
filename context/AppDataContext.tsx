@@ -3,10 +3,13 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 
 import { appendAuditEntry } from '@/services/auditLogService';
 import { emitDomainEvent } from '@/services/eventBus';
+import { normalizeActivitySchedule, touchesSchedule } from '@/services/scheduleEngine';
 import { ENTITY_SCHEMA_VERSION, EntityMetadata } from '@/types/entities';
 import { LifeLibraryPackApplyPayload } from '@/types/lifeLibraryPack';
+import { ActivitySchedule } from '@/types/schedule';
 
 type EntityInput<T extends EntityMetadata> = Omit<T, keyof EntityMetadata>;
+const ACTIVITY_SCHEDULES_STORAGE_KEY = 'lifekpi_activity_schedules';
 
 export interface Category extends EntityMetadata {
   name: string;
@@ -394,10 +397,15 @@ interface AppDataContextType {
   // ─── NEW ───
   subtasks: Subtask[];
   subtaskLogs: SubtaskLog[];
+  activitySchedules: ActivitySchedule[];
   addSubtask: (subtask: EntityInput<Subtask>) => Subtask;
   updateSubtask: (subtask: Subtask) => void;
   deleteSubtask: (id: string) => void;
   toggleSubtaskLog: (subtaskId: string, date: string) => void;
+  addActivitySchedule: (schedule: Partial<ActivitySchedule>) => ActivitySchedule;
+  updateActivitySchedule: (schedule: ActivitySchedule) => void;
+  deleteActivitySchedule: (scheduleId: string) => void;
+  getActivitySchedule: (activityId: string) => ActivitySchedule | undefined;
   // ─── People To-dos ───
   peopleTodos: PeopleTodo[];
   addPeopleTodo: (peopleTodo: EntityInput<PeopleTodo>) => void;
@@ -473,6 +481,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   // ─── NEW ───
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [subtaskLogs, setSubtaskLogs] = useState<SubtaskLog[]>([]);
+  const [activitySchedules, setActivitySchedules] = useState<ActivitySchedule[]>([]);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [peopleTodos, setPeopleTodos] = useState<PeopleTodo[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -527,6 +536,14 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         const savedSubtaskLogs = await AsyncStorage.getItem('subtaskLogs');
         if (savedSubtaskLogs) {
           setSubtaskLogs(JSON.parse(savedSubtaskLogs));
+        }
+        const savedActivitySchedules = await AsyncStorage.getItem(ACTIVITY_SCHEDULES_STORAGE_KEY);
+        if (savedActivitySchedules) {
+          setActivitySchedules(
+            (JSON.parse(savedActivitySchedules) as Partial<ActivitySchedule>[]).map(
+              normalizeActivitySchedule
+            )
+          );
         }
         const savedContactsData = await AsyncStorage.getItem('savedContacts');
         if (savedContactsData) {
@@ -662,6 +679,21 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
     save();
   }, [subtaskLogs, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem(
+          ACTIVITY_SCHEDULES_STORAGE_KEY,
+          JSON.stringify(activitySchedules)
+        );
+      } catch (error) {
+        console.error('Error saving activitySchedules to AsyncStorage', error);
+      }
+    };
+    save();
+  }, [activitySchedules, isHydrated]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -1085,6 +1117,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSubtasks(prev => prev.filter(s => s.id !== id));
     // Clean up logs for the deleted subtask
     setSubtaskLogs(prev => prev.filter(l => l.subtaskId !== id));
+    setActivitySchedules((prev) => prev.filter((schedule) => schedule.activityId !== id));
   };
 
   /** Toggle a subtask's completed state for a given date. Creates or flips the log. */
@@ -1125,6 +1158,30 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       });
     }
   };
+
+  const addActivitySchedule = (schedule: Partial<ActivitySchedule>): ActivitySchedule => {
+    const newSchedule = normalizeActivitySchedule(schedule);
+    setActivitySchedules((prev) => {
+      const otherSchedules = prev.filter((item) => item.activityId !== newSchedule.activityId);
+      return [...otherSchedules, newSchedule];
+    });
+    return newSchedule;
+  };
+
+  const updateActivitySchedule = (schedule: ActivitySchedule) => {
+    setActivitySchedules((prev) =>
+      prev.map((item) =>
+        item.id === schedule.id ? normalizeActivitySchedule(touchesSchedule(schedule)) : item
+      )
+    );
+  };
+
+  const deleteActivitySchedule = (scheduleId: string) => {
+    setActivitySchedules((prev) => prev.filter((item) => item.id !== scheduleId));
+  };
+
+  const getActivitySchedule = (activityId: string): ActivitySchedule | undefined =>
+    activitySchedules.find((schedule) => schedule.activityId === activityId);
 
   // ─── NEW: People To-dos ─────────────────────────────────────────────────────
 
@@ -1464,6 +1521,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     setLatestScore(null);
     setSubtasks([]);
     setSubtaskLogs([]);
+    setActivitySchedules([]);
     setSavedContacts([]);
     setPeopleTodos([]);
     setPeople([]);
@@ -1477,6 +1535,7 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       'latestScore',
       'subtasks',
       'subtaskLogs',
+      ACTIVITY_SCHEDULES_STORAGE_KEY,
       'savedContacts',
       'peopleTodos',
       'people',
@@ -1495,10 +1554,15 @@ export const AppDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         latestScore,
         subtasks,
         subtaskLogs,
+        activitySchedules,
         addSubtask,
         updateSubtask,
         deleteSubtask,
         toggleSubtaskLog,
+        addActivitySchedule,
+        updateActivitySchedule,
+        deleteActivitySchedule,
+        getActivitySchedule,
         peopleTodos,
         addPeopleTodo,
         deletePeopleTodo,

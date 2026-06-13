@@ -1,17 +1,17 @@
+import { ActivityScheduleCard } from '@/components/ActivityScheduleCard';
 import { DesktopShell } from '@/components/DesktopShell';
 import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
+import { ScheduleActivityModal } from '@/components/ScheduleActivityModal';
 import { SectionCard } from '@/components/SectionCard';
 import { KPI, Subtask, SubtaskFrequency, useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useDeviceType } from '@/hooks/useDeviceType';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ActivitySchedule } from '@/types/schedule';
 
 const FREQUENCY_OPTIONS: { label: string; value: SubtaskFrequency }[] = [
   { label: 'Daily', value: 'daily' },
@@ -80,9 +81,11 @@ interface SubtaskRowProps {
   subtask: Subtask;
   onEdit: (subtask: Subtask) => void;
   onDelete: (id: string) => void;
+  schedule?: ActivitySchedule;
+  onSchedule: (subtask: Subtask) => void;
 }
 
-function SubtaskRow({ subtask, onEdit, onDelete }: SubtaskRowProps) {
+function SubtaskRow({ subtask, onEdit, onDelete, schedule, onSchedule }: SubtaskRowProps) {
   const { theme } = useTheme();
 
   return (
@@ -92,6 +95,7 @@ function SubtaskRow({ subtask, onEdit, onDelete }: SubtaskRowProps) {
         <Text style={[stStyles.meta, { color: theme.textMuted }]}>
           {subtask.frequency} · {subtask.targetCount}x
         </Text>
+        <ActivityScheduleCard schedule={schedule} onPress={() => onSchedule(subtask)} />
       </View>
       <View style={stStyles.actions}>
         <TouchableOpacity
@@ -286,12 +290,24 @@ function SubtaskForm({ kpiId, editingSubtask, onDone }: SubtaskFormProps) {
 }
 
 function SubtasksSection({ kpiId }: { kpiId: string }) {
-  const { subtasks, deleteSubtask } = useAppData();
+  const {
+    categories,
+    kpis,
+    subtasks,
+    deleteSubtask,
+    getActivitySchedule,
+    addActivitySchedule,
+    updateActivitySchedule,
+    deleteActivitySchedule,
+  } = useAppData();
   const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
+  const [scheduleTarget, setScheduleTarget] = useState<Subtask | null>(null);
   const kpiSubtasks = subtasks.filter((subtask) => subtask.kpiId === kpiId);
+  const parentKpi = kpis.find((item) => item.id === kpiId);
+  const parentCategory = categories.find((item) => item.name === parentKpi?.category);
 
   const handleEdit = (subtask: Subtask) => {
     setEditingSubtask(subtask);
@@ -332,6 +348,8 @@ function SubtasksSection({ kpiId }: { kpiId: string }) {
                 subtask={subtask}
                 onEdit={handleEdit}
                 onDelete={deleteSubtask}
+                schedule={getActivitySchedule(subtask.id)}
+                onSchedule={setScheduleTarget}
               />
             ))
           )}
@@ -365,6 +383,28 @@ function SubtasksSection({ kpiId }: { kpiId: string }) {
           )}
         </View>
       ) : null}
+
+      <ScheduleActivityModal
+        visible={Boolean(scheduleTarget)}
+        subtask={scheduleTarget}
+        kpi={parentKpi}
+        category={parentCategory}
+        initialSchedule={scheduleTarget ? getActivitySchedule(scheduleTarget.id) : undefined}
+        onSave={(schedule) => {
+          const existing = scheduleTarget ? getActivitySchedule(scheduleTarget.id) : undefined;
+          if (existing) {
+            updateActivitySchedule({
+              ...schedule,
+              id: existing.id,
+              createdAt: existing.createdAt,
+            });
+            return;
+          }
+          addActivitySchedule(schedule);
+        }}
+        onDelete={deleteActivitySchedule}
+        onClose={() => setScheduleTarget(null)}
+      />
     </View>
   );
 }
@@ -602,7 +642,6 @@ export default function KPIManagerScreen() {
     originalCommand?: string | string[];
   }>();
   const router = useRouter();
-  const deviceType = useDeviceType();
   const { theme } = useTheme();
   const { categories, kpis, entries, latestActuals, addKPI, updateKPI, deleteKPI } = useAppData();
 
@@ -933,11 +972,7 @@ export default function KPIManagerScreen() {
     </ScrollView>
   );
 
-  if (deviceType === 'desktop') {
-    return <DesktopShell title="KPIs">{pageContent}</DesktopShell>;
-  }
-
-  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>{pageContent}</SafeAreaView>;
+  return <DesktopShell title="KPIs">{pageContent}</DesktopShell>;
 }
 
 const stStyles = StyleSheet.create({

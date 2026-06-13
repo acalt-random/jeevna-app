@@ -9,6 +9,7 @@ import {
   GeneratedOnboardingSetup,
   GeneratedRelationshipTracker,
 } from '@/types/onboarding';
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -435,6 +436,7 @@ export function GeneratedSetupPreview({
 }: GeneratedSetupPreviewProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Record<string, boolean>>({});
 
   const summary = useMemo(() => {
@@ -577,6 +579,15 @@ export function GeneratedSetupPreview({
                 {expanded ? (
                   <>
                     <View style={styles.categoryActionsRow}>
+                      <InlineActionButton
+                        label="Open Category"
+                        onPress={() =>
+                          router.push({
+                            pathname: '/category/[categoryName]',
+                            params: { categoryName: category.name },
+                          })
+                        }
+                      />
                       {editable ? (
                         <InlineActionButton
                           label={t('onboarding.preview.addKpi')}

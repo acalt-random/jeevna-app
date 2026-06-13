@@ -4,7 +4,9 @@ import { PageContainer } from '@/components/PageContainer';
 import { KPI, PEOPLE_GROUPS, Person, useAppData } from '@/context/AppDataContext';
 import { useTheme } from '@/context/ThemeContext';
 import { buildResponsibilitySnapshot } from '@/services/responsibilityEngine';
+import { lifeLibraryActivities, lifeLibraryCategories, lifeLibraryKpis } from '@/src/data/lifeLibrary';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import i18n from '@/src/localization/i18n';
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -43,8 +45,17 @@ function formatDisplayDate(value: string): string {
   });
 }
 
+function fallbackLabel(value: string): string {
+  return value
+    .replace(/^activity-/, '')
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function CategoryDetailScreen() {
-  const { categories, kpis, subtasks, subtaskLogs, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, addPersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
+  const { categories, kpis, subtasks, subtaskLogs, activitySchedules, latestActuals, entries, toggleSubtaskLog, addPeopleTodo, deletePeopleTodo, getPeopleTodosForKpi, people, addPerson, updatePerson, deletePerson, getRelationshipsScore, addPersonActivity, getActivitiesForPerson, addPersonTodo, deletePersonTodo, togglePersonTodo, getTodosForPerson } = useAppData();
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -257,10 +268,43 @@ export default function CategoryDetailScreen() {
     [categories, categoryName]
   );
 
+  const libraryCategory = useMemo(
+    () =>
+      lifeLibraryCategories.find((item) => {
+        const localizedName = i18n.t(item.nameKey, { defaultValue: fallbackLabel(item.id) });
+        return localizedName.trim().toLowerCase() === categoryName.toLowerCase();
+      }),
+    [categoryName]
+  );
+
   const categoryKpis = useMemo(
     () => kpis.filter((kpi) => category !== undefined && kpi.category === category.name),
     [kpis, category]
   );
+
+  const suggestedLibraryActivities = useMemo(() => {
+    if (!libraryCategory) return [];
+
+    return lifeLibraryActivities
+      .filter((activity) => {
+        const relatedKpi = lifeLibraryKpis.find((kpi) => kpi.id === activity.kpiId);
+        return relatedKpi?.categoryId === libraryCategory.id;
+      })
+      .sort((left, right) => {
+        if (left.recommended !== right.recommended) {
+          return left.recommended ? -1 : 1;
+        }
+        return right.importanceScore - left.importanceScore;
+      })
+      .slice(0, 5)
+      .map((activity) => ({
+        id: activity.id,
+        title: i18n.t(activity.nameKey, { defaultValue: fallbackLabel(activity.id) }),
+        frequency: activity.defaultFrequency,
+        importanceScore: activity.importanceScore,
+        recommended: activity.recommended,
+      }));
+  }, [libraryCategory]);
 
   const normalizedPeople = useMemo(() => {
     return people.map((person) => ({
@@ -324,9 +368,10 @@ export default function CategoryDetailScreen() {
         kpis,
         subtasks,
         subtaskLogs,
+        activitySchedules,
         today,
       }),
-    [categories, kpis, subtasks, subtaskLogs, today]
+    [activitySchedules, categories, kpis, subtasks, subtaskLogs, today]
   );
 
   const categoryResponsibility = useMemo(
@@ -364,8 +409,18 @@ export default function CategoryDetailScreen() {
   );
 
   const status = statusForScore(categoryScore);
+  const displayCategoryName =
+    category?.name ??
+    (libraryCategory
+      ? i18n.t(libraryCategory.nameKey, { defaultValue: fallbackLabel(libraryCategory.id) })
+      : categoryName);
+  const displayCategorySummary = libraryCategory
+    ? i18n.t(libraryCategory.descriptionKey, {
+        defaultValue: `Command center for ${displayCategoryName}.`,
+      })
+    : 'Only KPIs and subtasks for this category';
 
-  if (!categoryName || !category) {
+  if (!categoryName || (!category && !libraryCategory)) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
@@ -389,8 +444,8 @@ export default function CategoryDetailScreen() {
         <PageContainer>
           <View style={styles.headerRow}>
             <View style={styles.titleColumn}>
-              <Text style={[styles.title, { color: theme.textPrimary }]}>{category.name}</Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Only KPIs and subtasks for this category</Text>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>{displayCategoryName}</Text>
+              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{displayCategorySummary}</Text>
             </View>
             <TouchableOpacity style={[styles.backButtonCompact, { backgroundColor: theme.buttonSecondary, borderColor: theme.cardBorder }]} onPress={() => router.push('/(tabs)')}>
               <Text style={styles.backButtonText}>Home</Text>
@@ -414,6 +469,25 @@ export default function CategoryDetailScreen() {
               Due today: {categoryResponsibility.dueToday} | Overdue: {categoryResponsibility.overdue} | Completed today: {categoryResponsibility.completedToday}
             </Text>
           </View>
+
+          {suggestedLibraryActivities.length > 0 && (
+            <View style={[styles.librarySection, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
+              <Text style={[styles.attentionTitle, { color: theme.textPrimary }]}>Suggested from Life Library</Text>
+              {suggestedLibraryActivities.map((activity) => (
+                <View key={activity.id} style={[styles.libraryRow, { borderBottomColor: theme.cardBorder }]}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={[styles.libraryTitle, { color: theme.textPrimary }]}>{activity.title}</Text>
+                    <Text style={[styles.libraryMeta, { color: theme.textSecondary }]}>
+                      {activity.frequency} • importance {activity.importanceScore}/10
+                    </Text>
+                  </View>
+                  {activity.recommended ? (
+                    <Text style={[styles.libraryBadge, { color: theme.primary }]}>Recommended</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          )}
 
           {isRelationshipsCategory && (
             <View style={[styles.attentionSection, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
@@ -608,8 +682,27 @@ export default function CategoryDetailScreen() {
               return (
                 <View key={kpi.id} style={[styles.kpiCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderRadius: theme.borderRadius.lg }]}>
                   <View style={styles.kpiHeader}>
-                    <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
-                    <Text style={[styles.kpiScore, { color: status.color }]}>{kpiScore} / {kpi.weight}</Text>
+                    <View style={styles.kpiHeaderMain}>
+                      <Text style={[styles.kpiName, { color: theme.textPrimary }]}>{kpi.name}</Text>
+                      <Text style={[styles.kpiScore, { color: status.color }]}>{kpiScore} / {kpi.weight}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.kpiActionButton,
+                        {
+                          backgroundColor: theme.buttonSecondary,
+                          borderColor: theme.cardBorder,
+                          borderRadius: theme.borderRadius.sm,
+                        },
+                      ]}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(tabs)/entry',
+                          params: { kpiId: kpi.id },
+                        })
+                      }>
+                      <Text style={[styles.kpiActionText, { color: theme.textPrimary }]}>Log Entry</Text>
+                    </TouchableOpacity>
                   </View>
                   <View style={styles.kpiMetaRow}>
                     <Text style={[styles.kpiMeta, { color: theme.textSecondary }]}>Target: {kpi.target} {kpi.unit}</Text>
@@ -1165,6 +1258,37 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     marginBottom: 2,
   },
+  librarySection: {
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    marginBottom: 16,
+  },
+  libraryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  libraryTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#f8fafc',
+  },
+  libraryMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 4,
+  },
+  libraryBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   kpiCard: {
     backgroundColor: '#0f172a',
     borderRadius: 16,
@@ -1177,18 +1301,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 12,
     marginBottom: 12,
+  },
+  kpiHeaderMain: {
+    flex: 1,
+    paddingRight: 8,
   },
   kpiName: {
     fontSize: 18,
     fontWeight: '800',
     color: '#f8fafc',
-    flex: 1,
-    marginRight: 12,
+    marginBottom: 4,
   },
   kpiScore: {
     fontSize: 16,
     fontWeight: '900',
+  },
+  kpiActionButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiActionText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   kpiMetaRow: {
     flexDirection: 'row',

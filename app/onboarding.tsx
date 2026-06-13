@@ -568,7 +568,7 @@ export default function OnboardingScreen() {
                       0
                     );
                     return (
-                      <View
+                      <TouchableOpacity
                         key={category.id}
                         style={[
                           styles.categorySummaryCard,
@@ -576,7 +576,14 @@ export default function OnboardingScreen() {
                             backgroundColor: theme.secondaryBackground,
                             borderColor: theme.cardBorder,
                           },
-                        ]}>
+                        ]}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/category/[categoryName]',
+                            params: { categoryName: category.name },
+                          })
+                        }
+                        activeOpacity={0.84}>
                         <View
                           style={[
                             styles.categoryIconWrap,
@@ -600,7 +607,7 @@ export default function OnboardingScreen() {
                         <Text style={[styles.categorySummaryMeta, { color: theme.textSecondary }]}>
                           {`${activityCount} Activities`}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>

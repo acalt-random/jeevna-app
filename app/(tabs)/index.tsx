@@ -1,6 +1,8 @@
 import { DesktopShell } from '@/components/DesktopShell';
 import { EmptyState } from '@/components/EmptyState';
+import { GoodDaysCalendar } from '@/components/GoodDaysCalendar';
 import { LifeBuddySuggestions } from '@/components/LifeBuddySuggestions';
+import { CategoryCard } from '@/components/CategoryCard';
 import { PageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { ResponsiveGrid, ResponsiveGridItem } from '@/components/ResponsiveGrid';
@@ -15,6 +17,7 @@ import {
 } from '@/context/PreferencesContext';
 import { appendAuditEntry } from '@/services/auditLogService';
 import { emitDomainEvent } from '@/services/eventBus';
+import { buildGoodDaysMonthSummary } from '@/services/goodDaysEngine';
 import { buildLifeBuddySuggestions, LifeBuddySuggestion } from '@/services/suggestionEngine';
 import {
   buildResponsibilitySnapshot,
@@ -31,7 +34,6 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -731,6 +733,7 @@ export default function HomeScreen() {
     clearAllData,
     subtasks,
     subtaskLogs,
+    activitySchedules,
     addCategory,
     addKPI,
     addSubtask,
@@ -817,9 +820,22 @@ export default function HomeScreen() {
         kpis,
         subtasks,
         subtaskLogs,
+        activitySchedules,
         today,
       }),
-    [categories, kpis, subtasks, subtaskLogs, today]
+    [activitySchedules, categories, kpis, subtasks, subtaskLogs, today]
+  );
+
+  const goodDaysSummary = useMemo(
+    () =>
+      buildGoodDaysMonthSummary({
+        categories,
+        kpis,
+        subtasks,
+        subtaskLogs,
+        activitySchedules,
+      }),
+    [activitySchedules, categories, kpis, subtasks, subtaskLogs]
   );
 
   const categoryRows = useMemo(() => {
@@ -1503,7 +1519,7 @@ export default function HomeScreen() {
     deviceType === 'desktop' ? pendingKpiEntries.slice(0, 4) : pendingKpiEntries;
   const suggestedActionPreview =
     deviceType === 'desktop' ? suggestedActions.slice(0, 4) : suggestedActions;
-  const compactCategoryRows = deviceType === 'desktop' ? categoryRows.slice(0, 6) : categoryRows;
+  const compactCategoryRows = deviceType === 'desktop' ? categoryRows.slice(0, 6) : categoryRows.slice(0, 4);
 
   useSpeechRecognitionEvent('start', () => {
     setIsListening(true);
@@ -1909,6 +1925,10 @@ export default function HomeScreen() {
             </SectionCard>
           </ResponsiveGridItem>
 
+          <ResponsiveGridItem mobileSpan={1} tabletSpan={6} desktopSpan={4}>
+            <GoodDaysCalendar summary={goodDaysSummary} />
+          </ResponsiveGridItem>
+
           <ResponsiveGridItem mobileSpan={1} tabletSpan={3} desktopSpan={3}>
             <SectionCard>
               <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quick Actions</Text>
@@ -2110,38 +2130,34 @@ export default function HomeScreen() {
               <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
                 The current shape of your life areas at a glance.
               </Text>
-              <View style={styles.compactList}>
-                {compactCategoryRows.length === 0 ? (
-                  <Text style={[styles.compactEmptyText, { color: theme.textSecondary }]}>
-                    Add categories and KPIs to let Home highlight your progress.
-                  </Text>
-                ) : (
-                  compactCategoryRows.map((row) => (
-                    <TouchableOpacity
+              {compactCategoryRows.length === 0 ? (
+                <Text style={[styles.compactEmptyText, { color: theme.textSecondary }]}>
+                  Add categories and KPIs to let Home highlight your progress.
+                </Text>
+              ) : (
+                <ResponsiveGrid gap={10}>
+                  {compactCategoryRows.map((row) => (
+                    <ResponsiveGridItem
                       key={row.id}
-                      style={[styles.compactRowCard, { borderBottomColor: theme.cardBorder }]}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/category/[categoryName]',
-                          params: { categoryName: row.name },
-                        })
-                      }
-                      activeOpacity={0.8}>
-                      <View style={{ flex: 1, paddingRight: 10 }}>
-                        <Text style={[styles.compactRowTitle, { color: theme.textPrimary }]}>
-                          {row.name}
-                        </Text>
-                        <Text style={[styles.compactRowHint, { color: theme.textSecondary }]}>
-                          {row.status.label} | Responsibility {row.responsibilityScore}/100
-                        </Text>
-                      </View>
-                      <Text style={[styles.compactScoreValue, { color: row.status.color }]}>
-                        {row.score100}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
+                      mobileSpan={1}
+                      tabletSpan={3}
+                      desktopSpan={compactCategoryRows.length <= 2 ? 6 : 4}>
+                      <CategoryCard
+                        compact
+                        title={row.name}
+                        subtitle={`${row.status.label} • Responsibility ${row.responsibilityScore}/100`}
+                        score={row.score100}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/category/[categoryName]',
+                            params: { categoryName: row.name },
+                          })
+                        }
+                      />
+                    </ResponsiveGridItem>
+                  ))}
+                </ResponsiveGrid>
+              )}
             </SectionCard>
           </ResponsiveGridItem>
 
@@ -2428,11 +2444,7 @@ export default function HomeScreen() {
     </ScrollView>
   );
 
-  if (deviceType === 'desktop') {
-    return <DesktopShell title="Home / Life Buddy">{pageContent}</DesktopShell>;
-  }
-
-  return <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>{pageContent}</SafeAreaView>;
+  return <DesktopShell title="Home / Life Buddy">{pageContent}</DesktopShell>;
 }
 
 const ringStyles = StyleSheet.create({
@@ -2474,13 +2486,14 @@ const styles = StyleSheet.create({
   },
   commandInputRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'flex-end',
     gap: 10,
     marginTop: 10,
   },
   commandInput: {
     flex: 1,
-    minHeight: 92,
+    minHeight: 76,
+    maxHeight: 128,
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -2489,8 +2502,8 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   micButton: {
-    width: 52,
-    minHeight: 92,
+    width: 48,
+    height: 48,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
